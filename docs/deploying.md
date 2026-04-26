@@ -32,9 +32,17 @@ This pulls the latest notes, stages the current vault into Quartz, and runs `npx
 
 ## Quartz configuration
 
-Do not hand-edit `quartz/quartz.config.ts`.
+Do not hand-edit `quartz/quartz.config.ts` or `quartz/quartz.layout.ts`.
 
-This repository treats `config/quartz-site.json` as the source of truth and uses `scripts/configure-quartz.mjs` to generate `quartz/quartz.config.ts` from that JSON during build and serve flows.
+This repository treats `config/quartz-site.json` and `config/quartz-layout.json` as the source of truth and uses `scripts/configure-quartz.mjs` to generate `quartz/quartz.config.ts` and `quartz/quartz.layout.ts` from those JSON files during build and serve flows.
+
+## Comments
+
+Comments are enabled through Quartz's built-in Giscus component, configured in `config/quartz-layout.json`.
+
+Quartz handles the script injection itself. You should not add the raw `giscus.app/client.js` script manually.
+
+The current Quartz comments docs recommend using the `Announcements` discussion category for Giscus. This repository is configured with your provided `Q&A` category. If comment threads do not appear correctly, that category choice is the first thing to revisit.
 
 ## Prerequisites
 

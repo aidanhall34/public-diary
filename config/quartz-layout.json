@@ -1,0 +1,21 @@
+{
+  "footer": {
+    "links": {
+      "GitHub": "https://github.com/aidanhall34/public-diary"
+    }
+  },
+  "comments": {
+    "enabled": true,
+    "giscus": {
+      "repo": "aidanhall34/public-diary",
+      "repoId": "R_kgDOSNAFpw",
+      "category": "Announcements",
+      "categoryId": "DIC_kwDOSNAFp84C7vFb",
+      "mapping": "pathname",
+      "strict": true,
+      "reactionsEnabled": true,
+      "inputPosition": "top",
+      "lang": "en"
+    }
+  }
+}

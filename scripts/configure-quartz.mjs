@@ -5,7 +5,9 @@ const repoRoot = process.cwd()
 const quartzDir = path.resolve(repoRoot, "quartz")
 const packageJsonPath = path.join(quartzDir, "package.json")
 const siteConfigPath = path.resolve(repoRoot, "config", "quartz-site.json")
+const layoutConfigPath = path.resolve(repoRoot, "config", "quartz-layout.json")
 const quartzConfigPath = path.join(quartzDir, "quartz.config.ts")
+const quartzLayoutPath = path.join(quartzDir, "quartz.layout.ts")
 
 if (!fs.existsSync(packageJsonPath)) {
   console.error(`Missing Quartz package at ${packageJsonPath}`)
@@ -17,7 +19,13 @@ if (!fs.existsSync(siteConfigPath)) {
   process.exit(1)
 }
 
+if (!fs.existsSync(layoutConfigPath)) {
+  console.error(`Missing layout config at ${layoutConfigPath}`)
+  process.exit(1)
+}
+
 const siteConfig = JSON.parse(fs.readFileSync(siteConfigPath, "utf8"))
+const layoutConfig = JSON.parse(fs.readFileSync(layoutConfigPath, "utf8"))
 
 const renderValue = (value) => JSON.stringify(value, null, 2)
 
@@ -100,5 +108,98 @@ const config: QuartzConfig = {
 export default config
 `
 
+const footerLinks = Object.entries(layoutConfig.footer.links)
+  .map(([label, url]) => `      ${JSON.stringify(label)}: ${JSON.stringify(url)},`)
+  .join("\n")
+
+const commentsComponent =
+  layoutConfig.comments.enabled
+    ? `Component.Comments({
+      provider: "giscus",
+      options: {
+        repo: ${renderValue(layoutConfig.comments.giscus.repo)},
+        repoId: ${renderValue(layoutConfig.comments.giscus.repoId)},
+        category: ${renderValue(layoutConfig.comments.giscus.category)},
+        categoryId: ${renderValue(layoutConfig.comments.giscus.categoryId)},
+        mapping: ${renderValue(layoutConfig.comments.giscus.mapping)},
+        strict: ${renderValue(layoutConfig.comments.giscus.strict)},
+        reactionsEnabled: ${renderValue(layoutConfig.comments.giscus.reactionsEnabled)},
+        inputPosition: ${renderValue(layoutConfig.comments.giscus.inputPosition)},
+        lang: ${renderValue(layoutConfig.comments.giscus.lang)},
+      },
+    })`
+    : ""
+
+const afterBody = layoutConfig.comments.enabled ? `afterBody: [
+    ${commentsComponent},
+  ],` : "afterBody: [],"
+
+const quartzLayout = `import { PageLayout, SharedLayout } from "./quartz/cfg"
+import * as Component from "./quartz/components"
+
+export const sharedPageComponents: SharedLayout = {
+  head: Component.Head(),
+  header: [],
+  ${afterBody}
+  footer: Component.Footer({
+    links: {
+${footerLinks}
+    },
+  }),
+}
+
+export const defaultContentPageLayout: PageLayout = {
+  beforeBody: [
+    Component.ConditionalRender({
+      component: Component.Breadcrumbs(),
+      condition: (page) => page.fileData.slug !== "index",
+    }),
+    Component.ArticleTitle(),
+    Component.ContentMeta(),
+    Component.TagList(),
+  ],
+  left: [
+    Component.PageTitle(),
+    Component.MobileOnly(Component.Spacer()),
+    Component.Flex({
+      components: [
+        {
+          Component: Component.Search(),
+          grow: true,
+        },
+        { Component: Component.Darkmode() },
+        { Component: Component.ReaderMode() },
+      ],
+    }),
+    Component.Explorer(),
+  ],
+  right: [
+    Component.Graph(),
+    Component.DesktopOnly(Component.TableOfContents()),
+    Component.Backlinks(),
+  ],
+}
+
+export const defaultListPageLayout: PageLayout = {
+  beforeBody: [Component.Breadcrumbs(), Component.ArticleTitle(), Component.ContentMeta()],
+  left: [
+    Component.PageTitle(),
+    Component.MobileOnly(Component.Spacer()),
+    Component.Flex({
+      components: [
+        {
+          Component: Component.Search(),
+          grow: true,
+        },
+        { Component: Component.Darkmode() },
+      ],
+    }),
+    Component.Explorer(),
+  ],
+  right: [],
+}
+`
+
 fs.writeFileSync(quartzConfigPath, quartzConfig)
-console.log(`Wrote Quartz config from ${siteConfigPath}`)
+fs.writeFileSync(quartzLayoutPath, quartzLayout)
+console.log(`Wrote Quartz config from ${siteConfigPath} and ${layoutConfigPath}`)

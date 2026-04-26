@@ -10,6 +10,7 @@ The repository also stores operational documentation in `docs/`, mirrors that do
 
 - `Makefile`: local setup, staging, build, and validation entry points
 - `config/quartz-site.json`: source-of-truth site settings used to generate `quartz/quartz.config.ts`
+- `config/quartz-layout.json`: source-of-truth layout settings used to generate `quartz/quartz.layout.ts`
 - `dev/makefiles/`: composable makefile fragments for repo setup, Quartz, Drive sync, docs, and `act`
 - `.github/workflows/deploy-pages.yml`: scheduled and on-demand Pages deployment
 - `.github/workflows/sync-wiki.yml`: publishes `docs/` to the GitHub wiki
@@ -33,6 +34,7 @@ The repository also stores operational documentation in `docs/`, mirrors that do
 
 - The preferred Google Drive layout is a Google Workspace Shared Drive plus a service account member. This avoids long-lived user refresh tokens.
 - Quartz site settings are managed in `config/quartz-site.json`, and `scripts/configure-quartz.mjs` generates `quartz/quartz.config.ts` from that JSON.
+- Quartz layout settings, including comments, are managed in `config/quartz-layout.json`, and `scripts/configure-quartz.mjs` generates `quartz/quartz.layout.ts` from that JSON.
 - Quartz is configured to keep Obsidian markdown support enabled and to prefer frontmatter/filesystem dates over git dates.
 - The nightly deployment workflow is scheduled for `0 0 * * *`, which GitHub Actions interprets as 00:00 UTC daily.
 - The GitHub wiki must be initialized once in the repository UI before the wiki sync workflow can push content.

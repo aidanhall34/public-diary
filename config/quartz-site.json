@@ -1,6 +1,6 @@
 {
   "pageTitle": "Ah34's diary",
-  "pageTitleSuffix": "a dumping ground for brain farts",
+  "pageTitleSuffix": " - a dumping ground for brain farts",
   "enableSPA": true,
   "enablePopovers": true,
   "analytics": {
@@ -12,6 +12,7 @@
     "private",
     "templates",
     ".obsidian",
+    ".trash",
     "canvas/_daily-view-import.md"
   ],
   "defaultDateType": "modified",
