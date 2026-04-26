@@ -1,0 +1,88 @@
+name: Deploy Quartz site to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: quartz/package-lock.json
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
+          cleanup_credentials: true
+
+      - name: Install rclone
+        run: |
+          curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        env:
+          GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ vars.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
+          GOOGLE_DRIVE_SHARED_DRIVE_ID: ${{ vars.GOOGLE_DRIVE_SHARED_DRIVE_ID }}
+          GOOGLE_WORKSPACE_USER: ${{ vars.GOOGLE_WORKSPACE_USER }}
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf <<EOF
+          [vault]
+          type = drive
+          scope = drive.readonly
+          env_auth = true
+          root_folder_id = ${GOOGLE_DRIVE_ROOT_FOLDER_ID}
+          team_drive = ${GOOGLE_DRIVE_SHARED_DRIVE_ID}
+          impersonate = ${GOOGLE_WORKSPACE_USER}
+          EOF
+
+      - name: Build site
+        env:
+          GOOGLE_DRIVE_PATH: ${{ vars.GOOGLE_DRIVE_PATH }}
+        run: make build
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: quartz/public
+
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

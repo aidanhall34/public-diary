@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Study Stars ⭐</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --pink: #ff6eb4;
+    --purple: #9b5de5;
+    --yellow: #ffd60a;
+    --mint: #00c9a7;
+    --blue: #4cc9f0;
+    --orange: #ff9a3c;
+    --red: #ff4d6d;
+    --bg: #fff9f0;
+    --card-shadow: 0 8px 32px rgba(155,93,229,0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg);
+    min-height: 100vh;
+    padding: 30px 20px 50px;
+    overflow-x: hidden;
+  }
+
+  /* Floating background blobs */
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    z-index: 0;
+    opacity: 0.08;
+  }
+  body::before {
+    width: 500px; height: 500px;
+    background: var(--purple);
+    top: -100px; left: -100px;
+  }
+  body::after {
+    width: 400px; height: 400px;
+    background: var(--pink);
+    bottom: -80px; right: -80px;
+  }
+
+  .container {
+    max-width: 680px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 36px;
+    animation: popIn 0.6s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+
+  .header .emoji-row {
+    font-size: 2.8rem;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .emoji-row span {
+    display: inline-block;
+    animation: wiggle 2s ease-in-out infinite;
+  }
+  .emoji-row span:nth-child(2) { animation-delay: 0.2s; }
+  .emoji-row span:nth-child(3) { animation-delay: 0.4s; }
+  .emoji-row span:nth-child(4) { animation-delay: 0.6s; }
+  .emoji-row span:nth-child(5) { animation-delay: 0.8s; }
+
+  .header h1 {
+    font-family: 'Baloo 2', cursive;
+    font-size: 2.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--purple), var(--pink));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.1;
+  }
+
+  .header p {
+    font-size: 1.05rem;
+    color: #888;
+    margin-top: 6px;
+    font-weight: 600;
+  }
+
+  /* Section label */
+  .section-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 28px 0 14px;
+    animation: slideIn 0.5s ease both;
+  }
+  .section-label:nth-of-type(2) { animation-delay: 0.1s; }
+  .section-label:nth-of-type(3) { animation-delay: 0.2s; }
+
+  .section-label .pill {
+    font-family: 'Baloo 2', cursive;
+    font-size: 0.85rem;
+    font-weight: 800;
+    padding: 4px 14px;
+    border-radius: 99px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: white;
+  }
+  .pill.midweek { background: linear-gradient(135deg, #9b5de5, #4cc9f0); }
+  .pill.endweek { background: linear-gradient(135deg, #ff6eb4, #ff9a3c); }
+
+  .section-label .line {
+    flex: 1;
+    height: 2px;
+    border-radius: 2px;
+    opacity: 0.2;
+  }
+  .line.purple { background: var(--purple); }
+  .line.pink { background: var(--pink); }
+
+  /* Cards */
+  .card {
+    border-radius: 24px;
+    padding: 22px 24px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--card-shadow);
+    cursor: default;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    animation: slideIn 0.5s ease both;
+  }
+
+  .card:hover {
+    transform: translateY(-3px) scale(1.01);
+    box-shadow: 0 14px 40px rgba(155,93,229,0.22);
+  }
+
+  /* Sheen effect */
+  .card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+    transition: left 0.5s ease;
+  }
+  .card:hover::after { left: 150%; }
+
+  /* Tier colours */
+  .card.gold {
+    background: linear-gradient(135deg, #fff8e1, #fff3cd);
+    border: 2.5px solid #ffd60a;
+  }
+  .card.silver {
+    background: linear-gradient(135deg, #f3f0ff, #ede9fe);
+    border: 2.5px solid #9b5de5;
+  }
+  .card.bronze {
+    background: linear-gradient(135deg, #fff0f5, #ffe4ef);
+    border: 2.5px solid #ff6eb4;
+  }
+  .card.teal {
+    background: linear-gradient(135deg, #e8faf6, #d4f5ee);
+    border: 2.5px solid #00c9a7;
+  }
+
+  .card-icon {
+    font-size: 2.6rem;
+    flex-shrink: 0;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.12));
+  }
+
+  .card-body { flex: 1; }
+
+  .card-title {
+    font-family: 'Baloo 2', cursive;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #2d2d2d;
+    line-height: 1.2;
+  }
+
+  .card-sub {
+    font-size: 0.9rem;
+    color: #777;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+
+  .card-reward {
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .robux-amount {
+    font-family: 'Baloo 2', cursive;
+    font-size: 1.7rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .gold .robux-amount { color: #c8960a; }
+  .silver .robux-amount { color: #7c3aed; }
+  .bronze .robux-amount { color: #e91e8c; }
+  .teal .robux-amount { color: #00a085; }
+
+  .robux-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    opacity: 0.6;
+    text-transform: uppercase;
+    color: #444;
+  }
+
+  /* Stars decoration on card */
+  .card-stars {
+    position: absolute;
+    right: 16px;
+    top: 10px;
+    font-size: 0.75rem;
+    opacity: 0.35;
+  }
+
+  /* Failure section */
+  .failure-box {
+    margin-top: 32px;
+    border-radius: 24px;
+    padding: 22px 24px;
+    background: linear-gradient(135deg, #fff5f5, #ffe8e8);
+    border: 2.5px dashed #ff4d6d;
+    animation: slideIn 0.5s 0.4s ease both;
+  }
+
+  .failure-box h3 {
+    font-family: 'Baloo 2', cursive;
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #c9184a;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .failure-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+    color: #555;
+    font-weight: 600;
+  }
+  .failure-row .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 6px;
+  }
+  .dot.orange { background: var(--orange); }
+  .dot.red { background: var(--red); }
+
+  /* Deal box */
+  .deal-box {
+    margin-top: 20px;
+    border-radius: 20px;
+    padding: 18px 22px;
+    background: linear-gradient(135deg, var(--purple), #7048d4);
+    color: white;
+    text-align: center;
+    animation: slideIn 0.5s 0.5s ease both;
+    box-shadow: 0 8px 28px rgba(155,93,229,0.35);
+  }
+
+  .deal-box p {
+    font-family: 'Baloo 2', cursive;
+    font-size: 1.05rem;
+    font-weight: 600;
+    opacity: 0.95;
+    line-height: 1.5;
+  }
+
+  .deal-box .handshake {
+    font-size: 2rem;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  /* Footer stars */
+  .footer {
+    text-align: center;
+    margin-top: 36px;
+    font-size: 1.8rem;
+    animation: popIn 0.5s 0.6s ease both;
+    opacity: 0;
+    animation-fill-mode: forwards;
+  }
+
+  /* Animations */
+  @keyframes popIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  @keyframes wiggle {
+    0%, 100% { transform: rotate(-8deg) scale(1); }
+    50% { transform: rotate(8deg) scale(1.15); }
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Stagger card animations */
+  .card:nth-child(1) { animation-delay: 0.1s; }
+  .card:nth-child(2) { animation-delay: 0.2s; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="emoji-row">
+      <span>🌟</span><span>📚</span><span>🎮</span><span>💜</span><span>🌟</span>
+    </div>
+    <h1>My Study Stars</h1>
+    <p>Work hard → earn your Robux! 🎯</p>
+  </div>
+
+  <!-- Midweek Section -->
+  <div class="section-label">
+    <div class="pill midweek">⚡ Midweek Bonus</div>
+    <div class="line purple"></div>
+  </div>
+
+  <div class="card gold">
+    <div class="card-stars">⭐⭐⭐</div>
+    <div class="card-icon">🏆</div>
+    <div class="card-body">
+      <div class="card-title">Superstar Score!</div>
+      <div class="card-sub">85% or above by midweek</div>
+    </div>
+    <div class="card-reward">
+      <div class="robux-amount">1,500</div>
+      <div class="robux-label">Robux</div>
+    </div>
+  </div>
+
+  <div class="card teal">
+    <div class="card-stars">⭐⭐</div>
+    <div class="card-icon">🌈</div>
+    <div class="card-body">
+      <div class="card-title">Great Work!</div>
+      <div class="card-sub">75% or above by midweek</div>
+    </div>
+    <div class="card-reward">
+      <div class="robux-amount">1,000</div>
+      <div class="robux-label">Robux</div>
+    </div>
+  </div>
+
+  <!-- End of Week Section -->
+  <div class="section-label">
+    <div class="pill endweek">🎀 End of Week</div>
+    <div class="line pink"></div>
+  </div>
+
+  <div class="card silver">
+    <div class="card-stars">⭐⭐</div>
+    <div class="card-icon">🥇</div>
+    <div class="card-body">
+      <div class="card-title">Amazing Effort!</div>
+      <div class="card-sub">85% or above by end of week</div>
+    </div>
+    <div class="card-reward">
+      <div class="robux-amount">1,000</div>
+      <div class="robux-label">Robux</div>
+    </div>
+  </div>
+
+  <div class="card bronze">
+    <div class="card-stars">⭐</div>
+    <div class="card-icon">🌸</div>
+    <div class="card-body">
+      <div class="card-title">Good Try!</div>
+      <div class="card-sub">75% or above by end of week</div>
+    </div>
+    <div class="card-reward">
+      <div class="robux-amount">500</div>
+      <div class="robux-label">Robux</div>
+    </div>
+  </div>
+
+  <!-- Failure/redo section -->
+  <div class="failure-box">
+    <h3>🔁 Redo Zone</h3>
+    <div class="failure-row">
+      <div class="dot orange"></div>
+      <span><strong>50–74%?</strong> No Robux this time — but no big deal! We'll review it together and try again next week. 💪</span>
+    </div>
+    <div class="failure-row">
+      <div class="dot red"></div>
+      <span><strong>Under 50%?</strong> We sit down together and redo that subject. No shortcuts — because you're smarter than that! 😊</span>
+    </div>
+  </div>
+
+  <!-- Deal box -->
+  <div class="deal-box">
+    <span class="handshake">🤝</span>
+    <p>The deal is simple: <strong>you bring the effort, I bring the Robux.</strong><br>I believe in you — now go show me what you've got!</p>
+  </div>
+
+  <div class="footer">🌟 ✨ 💜 ✨ 🌟</div>
+
+</div>
+</body>
+</html>

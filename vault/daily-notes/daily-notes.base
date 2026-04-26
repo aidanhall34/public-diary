@@ -1,0 +1,19 @@
+filters:
+  and:
+    - '!file.name.endsWith(".base")'
+    - file.path.startsWith("daily-notes")
+    - '!file.folder.contains("images")'
+properties:
+  file.name:
+    displayName: Link
+views:
+  - type: table
+    name: Table
+    order:
+      - file.path
+      - file.name
+      - weather
+      - creation date
+    sort:
+      - property: creation date
+        direction: DESC

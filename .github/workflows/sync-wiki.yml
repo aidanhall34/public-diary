@@ -1,0 +1,35 @@
+name: Sync docs to GitHub Wiki
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - README.md
+      - docs/**
+      - .github/workflows/sync-wiki.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki
+  cancel-in-progress: true
+
+jobs:
+  publish-wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sync root README into docs
+        run: cp README.md docs/README.md
+
+      - name: Publish docs to wiki
+        uses: Andrew-Chen-Wang/github-wiki-action@v5
+        with:
+          path: docs
+          preprocess: true
+          disable-empty-commits: true
