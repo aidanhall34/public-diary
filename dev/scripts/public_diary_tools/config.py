@@ -70,6 +70,11 @@ def _is_set(value: str) -> bool:
     return bool(value and value != "(unset)")
 
 
+def _can_use_workspace_delegation(user: str) -> bool:
+    domain = user.rsplit("@", 1)[-1].lower()
+    return domain not in {"gmail.com", "googlemail.com"}
+
+
 def _drive_path_suggestions(root_folder_id: str) -> list[tuple[str, str]]:
     if not root_folder_id:
         return [
@@ -320,7 +325,23 @@ def build_act_vars(
             output_fn=output_fn,
             custom_label="Custom Workspace user",
         )
-        google_workspace_delegation_enabled = "true" if google_workspace_user else ""
+        existing_delegation_enabled = env_or_existing("GOOGLE_WORKSPACE_DELEGATION_ENABLED", existing) == "true"
+        can_use_workspace_delegation = _can_use_workspace_delegation(google_workspace_user)
+        google_workspace_delegation_enabled = (
+            "true" if google_workspace_user and existing_delegation_enabled and can_use_workspace_delegation else ""
+        )
+        if google_workspace_user and not existing_delegation_enabled:
+            info(
+                "Leaving GOOGLE_WORKSPACE_DELEGATION_ENABLED disabled. Enable it only after configuring "
+                "domain-wide delegation in Google Workspace Admin Console.",
+                output_fn=output_fn,
+            )
+        if google_workspace_user and not can_use_workspace_delegation:
+            info(
+                "Ignoring GOOGLE_WORKSPACE_DELEGATION_ENABLED because consumer Gmail accounts do not support "
+                "domain-wide delegation. Share the Drive folder with the service account instead.",
+                output_fn=output_fn,
+            )
 
     return ActVars(
         gcp_workload_identity_provider=prompt_setting(

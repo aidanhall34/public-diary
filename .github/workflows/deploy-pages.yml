@@ -78,7 +78,10 @@ jobs:
         if: >-
           ${{
             env.ACT != 'true' &&
-            vars.GOOGLE_WORKSPACE_DELEGATION_ENABLED != 'true'
+            (
+              vars.GOOGLE_WORKSPACE_DELEGATION_ENABLED != 'true' ||
+              vars.GOOGLE_WORKSPACE_USER == ''
+            )
           }}
         id: auth
         uses: google-github-actions/auth@v3
@@ -98,6 +101,7 @@ jobs:
             vars.GOOGLE_WORKSPACE_USER != ''
           }}
         id: auth_dwd
+        continue-on-error: true
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -108,6 +112,35 @@ jobs:
           access_token_subject: ${{ vars.GOOGLE_WORKSPACE_USER }}
           create_credentials_file: false
 
+      - name: Authenticate to Google Cloud without Workspace delegation
+        if: >-
+          ${{
+            env.ACT != 'true' &&
+            steps.auth_dwd.outcome == 'failure'
+          }}
+        id: auth_fallback
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/drive.readonly
+          access_token_lifetime: 3600s
+          create_credentials_file: false
+
+      - name: Warn about Workspace delegation fallback
+        if: >-
+          ${{
+            env.ACT != 'true' &&
+            steps.auth_dwd.outcome == 'failure'
+          }}
+        run: |
+          cat >> "${GITHUB_STEP_SUMMARY}" <<'EOF'
+          Google Workspace delegated authentication failed, so the workflow retried with normal Workload Identity
+          Federation. If the vault is in a user's My Drive, share the folder with the service account or configure
+          domain-wide delegation in Google Workspace Admin Console for the Drive readonly scope.
+          EOF
+
       - name: Install rclone
         run: |
           curl https://rclone.org/install.sh | sudo bash
@@ -116,8 +149,9 @@ jobs:
         env:
           GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ vars.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
           GOOGLE_DRIVE_SHARED_DRIVE_ID: ${{ vars.GOOGLE_DRIVE_SHARED_DRIVE_ID }}
-          GOOGLE_DRIVE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token ||
-            steps.auth_dwd.outputs.access_token ||
+          GOOGLE_DRIVE_ACCESS_TOKEN: ${{ steps.auth_dwd.outputs.access_token ||
+            steps.auth.outputs.access_token ||
+            steps.auth_fallback.outputs.access_token ||
             secrets.GOOGLE_DRIVE_ACCESS_TOKEN }}
         run: |
           mkdir -p ~/.config/rclone
