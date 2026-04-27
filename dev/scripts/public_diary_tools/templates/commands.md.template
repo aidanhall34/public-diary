@@ -96,8 +96,11 @@ GitHub repository variables written by the tooling:
 - `GOOGLE_WORKSPACE_USER`
 
 GitHub workflow authentication uses a GitHub App installation token minted by `actions/create-github-app-token`.
-Create and install the app with `make python-tool ARGS="provision-github-app"`. The tool uploads
-`PUBLIC_DIARY_APP_CLIENT_ID` and `PUBLIC_DIARY_APP_PRIVATE_KEY` to repository secrets and writes a local ignored
+Create or reuse the app with `make python-tool ARGS="provision-github-app"`. The tool first checks whether local app
+credentials are already installed on this repository with the required permissions. If setup is still needed, it offers
+a numbered choice to create a new app or use an existing app. For an existing app, it checks permissions and repository
+mapping, attempts to add this repository to selected-repository installations when needed, uploads
+`PUBLIC_DIARY_APP_CLIENT_ID` and `PUBLIC_DIARY_APP_PRIVATE_KEY` to repository secrets, and writes a local ignored
 `dev/act/github-app.env` source file for `act`.
 
 Set these GitHub App repository permissions:

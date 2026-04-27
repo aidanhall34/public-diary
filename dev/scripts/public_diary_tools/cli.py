@@ -10,6 +10,7 @@ import os
 import sys
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from string import Template
@@ -17,6 +18,7 @@ from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
 import requests
+from github import GithubException, GithubIntegration
 
 from public_diary_tools.clients import (
     DRIVE_READONLY_SCOPE,
@@ -45,6 +47,7 @@ from public_diary_tools.paths import (
     google_drive_token_file,
 )
 from public_diary_tools.progress import track_web_request, web_request_progress
+from public_diary_tools.prompting import prompt_required_value, select_option
 from public_diary_tools.wiki import stage_wiki_docs
 
 REQUIRED_APIS = [
@@ -66,6 +69,20 @@ GITHUB_APP_PRIVATE_KEY_SECRET = "PUBLIC_DIARY_APP_PRIVATE_KEY"
 LEGACY_GITHUB_APP_CLIENT_ID_SECRET = "GITHUB_APP_CLIENT_ID"
 LEGACY_GITHUB_APP_PRIVATE_KEY_SECRET = "GITHUB_APP_PRIVATE_KEY"
 GITHUB_APP_NAME_MAX_LENGTH = 34
+GITHUB_APP_REQUIRED_PERMISSIONS = {
+    "actions": "read",
+    "contents": "write",
+    "metadata": "read",
+    "pages": "write",
+    "pull_requests": "write",
+}
+GITHUB_APP_PERMISSION_ORDER = {"none": 0, "read": 1, "write": 2, "admin": 3}
+
+
+@dataclass(frozen=True)
+class GitHubAppCredentials:
+    client_id: str
+    private_key: str
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -368,6 +385,13 @@ def _github_app_values(required: bool = False) -> dict[str, str]:
     return values
 
 
+def _github_app_credentials(values: dict[str, str]) -> GitHubAppCredentials:
+    return GitHubAppCredentials(
+        client_id=values[GITHUB_APP_CLIENT_ID_SECRET],
+        private_key=values[GITHUB_APP_PRIVATE_KEY_SECRET].replace("\\n", "\n"),
+    )
+
+
 def _github_secret_values(webhook: str = "", require_app: bool = False) -> dict[str, str]:
     values = _github_app_values(required=require_app)
     webhook = webhook or _optional_discord_webhook_value()
@@ -384,6 +408,10 @@ def _write_github_app_file(client_id: str, private_key: str) -> None:
             GITHUB_APP_PRIVATE_KEY_SECRET: _escaped_pem(private_key),
         },
     )
+
+
+def _write_existing_github_app_file(credentials: GitHubAppCredentials) -> None:
+    _write_github_app_file(credentials.client_id, credentials.private_key)
 
 
 def _escaped_pem(private_key: str) -> str:
@@ -649,13 +677,159 @@ def _convert_github_app_manifest(code: str) -> dict[str, Any]:
     return cast(dict[str, Any], _github_request("POST", f"/app-manifests/{code}/conversions"))
 
 
+def _repository_id(repo: str, token: str) -> int:
+    response = cast(dict[str, Any], _github_request("GET", f"/repos/{repo}", token))
+    return int(response["id"])
+
+
+def _github_integration(credentials: GitHubAppCredentials) -> GithubIntegration:
+    return GithubIntegration(credentials.client_id, credentials.private_key)
+
+
+def _github_object_data(value: Any) -> dict[str, Any]:
+    raw_data = getattr(value, "raw_data", {})
+    return cast(dict[str, Any], raw_data)
+
+
+def _github_app_info(credentials: GitHubAppCredentials) -> dict[str, Any]:
+    return _github_object_data(_github_integration(credentials).get_app())
+
+
+def _github_app_installation_for_repo(repo: str, credentials: GitHubAppCredentials) -> dict[str, Any] | None:
+    owner, repo_name = repo.split("/", 1)
+    try:
+        installation = _github_integration(credentials).get_repo_installation(owner, repo_name)
+    except GithubException as exc:
+        if getattr(exc, "status", 0) == 404:
+            return None
+        raise
+    return _github_object_data(installation)
+
+
+def _github_app_installations(credentials: GitHubAppCredentials) -> list[dict[str, Any]]:
+    return [_github_object_data(installation) for installation in _github_integration(credentials).get_installations()]
+
+
+def _permission_satisfies(actual: str, required: str) -> bool:
+    return GITHUB_APP_PERMISSION_ORDER.get(actual, 0) >= GITHUB_APP_PERMISSION_ORDER[required]
+
+
+def _missing_github_app_permissions(installation: dict[str, Any]) -> list[str]:
+    permissions = installation.get("permissions", {})
+    if not isinstance(permissions, dict):
+        permissions = {}
+    return [
+        f"{name}: {required}"
+        for name, required in GITHUB_APP_REQUIRED_PERMISSIONS.items()
+        if not _permission_satisfies(str(permissions.get(name, "none")), required)
+    ]
+
+
+def _validate_github_app_permissions(installation: dict[str, Any]) -> None:
+    missing = _missing_github_app_permissions(installation)
+    if missing:
+        settings_url = installation.get("html_url", "the GitHub App installation settings")
+        raise RuntimeError(
+            "GitHub App installation is missing required repository permissions: "
+            f"{', '.join(missing)}. Update permissions at {settings_url}, then rerun provisioning.",
+        )
+
+
+def _find_owner_installation(repo: str, credentials: GitHubAppCredentials) -> dict[str, Any] | None:
+    owner = repo.split("/", 1)[0].lower()
+    for installation in _github_app_installations(credentials):
+        account = installation.get("account", {})
+        if isinstance(account, dict) and str(account.get("login", "")).lower() == owner:
+            return installation
+    return None
+
+
+def _add_repo_to_github_app_installation(repo: str, installation: dict[str, Any], token: str) -> None:
+    if installation.get("repository_selection") == "all":
+        return
+    installation_id = int(installation["id"])
+    repo_id = _repository_id(repo, token)
+    try:
+        _github_request("PUT", f"/user/installations/{installation_id}/repositories/{repo_id}", token)
+    except requests.HTTPError as exc:
+        settings_url = installation.get("html_url", "the GitHub App installation settings")
+        print(f"GitHub did not allow adding {repo} to the app installation through the API: {exc}")
+        print(f"Open {settings_url}, add {repo} to repository access, then return here.")
+        input("Press Enter after updating the app installation: ")
+
+
 def _prompt_github_app_installation(app_slug: str, repo: str) -> None:
     print(f"Install the GitHub App for {repo}: https://github.com/apps/{app_slug}/installations/new")
     print("If GitHub asks for repository access, select this repository or all repositories.")
     input("Press Enter after installing the app: ")
 
 
+def _prompt_existing_github_app_credentials() -> GitHubAppCredentials:
+    client_id = prompt_required_value("Existing GitHub App client ID")
+    private_key_path = Path(prompt_required_value("Path to existing GitHub App private key PEM"))
+    if not private_key_path.exists():
+        raise RuntimeError(f"GitHub App private key file not found: {private_key_path}")
+    return GitHubAppCredentials(client_id=client_id, private_key=private_key_path.read_text())
+
+
+def _select_github_app_setup_action(has_credentials: bool) -> str:
+    existing_label = (
+        f"Use existing GitHub App credentials from {github_app_file()} or environment"
+        if has_credentials
+        else "Use an existing GitHub App"
+    )
+    return select_option(
+        "GitHub App setup",
+        [
+            ("create", "Create a new GitHub App"),
+            ("existing", existing_label),
+        ],
+    )
+
+
+def _github_app_slug(credentials: GitHubAppCredentials, installation: dict[str, Any] | None = None) -> str:
+    if installation:
+        app_slug = installation.get("app_slug", "")
+        if app_slug:
+            return str(app_slug)
+    app = _github_app_info(credentials)
+    return str(app.get("slug") or app.get("name") or credentials.client_id)
+
+
+def _ensure_existing_github_app(repo: str, token: str, credentials: GitHubAppCredentials) -> str:
+    installation = _github_app_installation_for_repo(repo, credentials)
+    if installation is None:
+        owner_installation = _find_owner_installation(repo, credentials)
+        if owner_installation is None:
+            _prompt_github_app_installation(_github_app_slug(credentials), repo)
+        else:
+            _add_repo_to_github_app_installation(repo, owner_installation, token)
+        installation = _github_app_installation_for_repo(repo, credentials)
+    if installation is None:
+        raise RuntimeError(f"GitHub App installation for {repo} was not found after setup.")
+    _validate_github_app_permissions(installation)
+    _write_existing_github_app_file(credentials)
+    asyncio.run(_upload_github_secrets(_github_app_values(required=True), repo, token))
+    return _github_app_slug(credentials, installation)
+
+
 def _provision_github_app(repo: str, token: str) -> str:
+    existing_values = _github_app_values()
+    if existing_values:
+        credentials = _github_app_credentials(existing_values)
+        installation = _github_app_installation_for_repo(repo, credentials)
+        if installation is not None:
+            _validate_github_app_permissions(installation)
+            asyncio.run(_upload_github_secrets(_github_app_values(required=True), repo, token))
+            return _github_app_slug(credentials, installation)
+
+    action = _select_github_app_setup_action(bool(existing_values))
+    if action == "existing":
+        credentials = (
+            _github_app_credentials(existing_values) if existing_values else _prompt_existing_github_app_credentials()
+        )
+        return _ensure_existing_github_app(repo, token, credentials)
+
     manifest = _github_app_manifest(repo, "http://127.0.0.1/")
     app = _convert_github_app_manifest(_wait_for_manifest_code(manifest))
     client_id = str(app["client_id"])

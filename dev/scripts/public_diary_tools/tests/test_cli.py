@@ -4,14 +4,23 @@ import io
 import json
 import os
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Self, cast
 
 import pytest
+import requests
+from github import GithubException
 from public_diary_tools import cli
 from public_diary_tools.clients import DRIVE_READONLY_SCOPE
 from public_diary_tools.envfiles import read_env_file, write_env_file
+from public_diary_tools.paths import github_app_file
+
+
+def _append_call(calls: list[tuple[Any, ...]], call: tuple[Any, ...], result: Any = None) -> Any:
+    calls.append(call)
+    return result
 
 
 def test_write_act_files_uses_local_secret_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -581,10 +590,11 @@ def test_provision_github_app_writes_and_uploads_credentials(monkeypatch: pytest
     monkeypatch.setattr(cli, "github_token_from_gh", lambda: "token")
     monkeypatch.setattr(cli, "GithubClient", FakeGithub)
     monkeypatch.setattr(cli, "_wait_for_manifest_code", lambda _manifest: "manifest-code")
+    monkeypatch.setattr(cli, "_select_github_app_setup_action", lambda _has_credentials: "create")
     monkeypatch.setattr(
         cli,
         "_prompt_github_app_installation",
-        lambda app_slug, repo: calls.append(("install", app_slug, repo)),
+        lambda app_slug, repo: _append_call(calls, ("install", app_slug, repo)),
     )
     monkeypatch.setattr(cli, "_github_request", fake_request)
 
@@ -597,6 +607,250 @@ def test_provision_github_app_writes_and_uploads_credentials(monkeypatch: pytest
     assert ("install", "public-diary-automation", "owner/repo") in calls
     assert ("secret", "PUBLIC_DIARY_APP_CLIENT_ID", "client-id") in calls
     assert ("secret", "PUBLIC_DIARY_APP_PRIVATE_KEY", "-----BEGIN KEY-----\\nprivate\\n-----END KEY-----") in calls
+
+
+def test_provision_github_app_skips_when_existing_app_has_repo(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    app_file = tmp_path / "github-app.env"
+    write_env_file(
+        app_file,
+        {"PUBLIC_DIARY_APP_CLIENT_ID": "client-id", "PUBLIC_DIARY_APP_PRIVATE_KEY": "private-key"},
+    )
+    calls: list[tuple[Any, ...]] = []
+    installation = {
+        "app_slug": "public-diary-automation",
+        "permissions": cli.GITHUB_APP_REQUIRED_PERMISSIONS,
+        "html_url": "https://github.com/settings/installations/1",
+    }
+
+    class FakeGithub:
+        def __init__(self, repo: str, token: str) -> None:
+            calls.append(("github", repo, token))
+
+        def set_secret(self, name: str, value: str) -> None:
+            calls.append(("secret", name, value))
+
+    monkeypatch.setenv("GITHUB_APP_FILE", str(app_file))
+    monkeypatch.setattr(cli, "GithubClient", FakeGithub)
+    monkeypatch.setattr(cli, "_github_app_installation_for_repo", lambda repo, credentials: installation)
+    monkeypatch.setattr(
+        cli,
+        "_select_github_app_setup_action",
+        lambda _has_credentials: _append_call(calls, ("select",), "create"),
+    )
+
+    assert cli._provision_github_app("owner/repo", "token") == "public-diary-automation"  # noqa: SLF001
+
+    assert ("select",) not in calls
+    assert ("secret", "PUBLIC_DIARY_APP_CLIENT_ID", "client-id") in calls
+    assert ("secret", "PUBLIC_DIARY_APP_PRIVATE_KEY", "private-key") in calls
+
+
+def test_ensure_existing_github_app_adds_missing_repo(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    app_file = tmp_path / "github-app.env"
+    credentials = cli.GitHubAppCredentials("client-id", "private-key")
+    calls: list[tuple[Any, ...]] = []
+    owner_installation = {
+        "id": 456,
+        "app_slug": "public-diary-automation",
+        "repository_selection": "selected",
+        "permissions": cli.GITHUB_APP_REQUIRED_PERMISSIONS,
+    }
+    repo_installation = {
+        **owner_installation,
+        "html_url": "https://github.com/settings/installations/456",
+    }
+    install_lookup = iter([None, repo_installation])
+
+    class FakeGithub:
+        def __init__(self, repo: str, token: str) -> None:
+            calls.append(("github", repo, token))
+
+        def set_secret(self, name: str, value: str) -> None:
+            calls.append(("secret", name, value))
+
+    monkeypatch.setenv("GITHUB_APP_FILE", str(app_file))
+    monkeypatch.setattr(cli, "GithubClient", FakeGithub)
+    monkeypatch.setattr(cli, "_github_app_installation_for_repo", lambda _repo, _credentials: next(install_lookup))
+    monkeypatch.setattr(cli, "_find_owner_installation", lambda _repo, _credentials: owner_installation)
+    monkeypatch.setattr(
+        cli,
+        "_add_repo_to_github_app_installation",
+        lambda repo, installation, token: _append_call(calls, ("add", repo, installation["id"], token)),
+    )
+
+    assert cli._ensure_existing_github_app("owner/repo", "token", credentials) == "public-diary-automation"  # noqa: SLF001
+
+    assert read_env_file(app_file) == {
+        "PUBLIC_DIARY_APP_CLIENT_ID": "client-id",
+        "PUBLIC_DIARY_APP_PRIVATE_KEY": "private-key",
+    }
+    assert ("add", "owner/repo", 456, "token") in calls
+    assert ("secret", "PUBLIC_DIARY_APP_CLIENT_ID", "client-id") in calls
+
+
+def test_validate_github_app_permissions_reports_missing() -> None:
+    installation = {
+        "permissions": {"metadata": "read", "contents": "read"},
+        "html_url": "https://github.com/settings/installations/1",
+    }
+
+    with pytest.raises(RuntimeError, match="contents: write"):
+        cli._validate_github_app_permissions(installation)  # noqa: SLF001
+
+
+def test_github_app_installation_helpers_use_app_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    @dataclass
+    class FakeObject:
+        raw_data: dict[str, Any]
+
+    class FakeIntegration:
+        def __init__(self, client_id: str, private_key: str) -> None:
+            assert client_id == "client-id"
+            assert private_key == "private\nkey"
+
+        def get_app(self) -> FakeObject:
+            return FakeObject({"slug": "public-diary-automation"})
+
+        def get_repo_installation(self, owner: str, repo: str) -> FakeObject:
+            assert (owner, repo) == ("owner", "repo")
+            return FakeObject({"app_slug": "public-diary-automation"})
+
+        def get_installations(self) -> list[FakeObject]:
+            return [
+                FakeObject({"account": {"login": "other"}}),
+                FakeObject({"account": {"login": "owner"}, "id": 456}),
+            ]
+
+    credentials = cli.GitHubAppCredentials("client-id", "private\nkey")
+    monkeypatch.setattr(cli, "GithubIntegration", FakeIntegration)
+
+    assert cli._github_app_info(credentials) == {"slug": "public-diary-automation"}  # noqa: SLF001
+    assert cli._github_app_installation_for_repo("owner/repo", credentials) == {  # noqa: SLF001
+        "app_slug": "public-diary-automation",
+    }
+    assert cli._find_owner_installation("owner/repo", credentials) == {"account": {"login": "owner"}, "id": 456}  # noqa: SLF001
+
+
+def test_github_app_installation_for_repo_returns_none_on_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeIntegration:
+        def __init__(self, _client_id: str, _private_key: str) -> None:
+            return None
+
+        def get_repo_installation(self, _owner: str, _repo: str) -> object:
+            raise GithubException(404, {})
+
+    monkeypatch.setattr(cli, "GithubIntegration", FakeIntegration)
+
+    assert cli._github_app_installation_for_repo("owner/repo", cli.GitHubAppCredentials("id", "key")) is None  # noqa: SLF001
+
+
+def test_add_repo_to_github_app_installation_skips_all_repos(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[Any, ...]] = []
+    monkeypatch.setattr(cli, "_repository_id", lambda *_args: _append_call(calls, ("repo-id",), 789))
+
+    cli._add_repo_to_github_app_installation("owner/repo", {"repository_selection": "all"}, "token")  # noqa: SLF001
+
+    assert calls == []
+
+
+def test_add_repo_to_github_app_installation_uses_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[Any, ...]] = []
+    monkeypatch.setattr(cli, "_repository_id", lambda repo, token: _append_call(calls, ("repo-id", repo, token), 789))
+    monkeypatch.setattr(
+        cli,
+        "_github_request",
+        lambda method, path, token: _append_call(calls, ("request", method, path, token)),
+    )
+
+    cli._add_repo_to_github_app_installation(  # noqa: SLF001
+        "owner/repo",
+        {"id": 456, "repository_selection": "selected"},
+        "token",
+    )
+
+    assert calls == [
+        ("repo-id", "owner/repo", "token"),
+        ("request", "PUT", "/user/installations/456/repositories/789", "token"),
+    ]
+
+
+def test_add_repo_to_github_app_installation_falls_back_to_manual(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    prompts: list[str] = []
+
+    def raise_http_error(*_args: Any) -> None:
+        response = requests.Response()
+        response.status_code = 403
+        raise requests.HTTPError("403 forbidden", response=response)
+
+    monkeypatch.setattr(cli, "_repository_id", lambda _repo, _token: 789)
+    monkeypatch.setattr(cli, "_github_request", raise_http_error)
+    monkeypatch.setattr("builtins.input", lambda prompt: prompts.append(prompt))
+
+    cli._add_repo_to_github_app_installation(  # noqa: SLF001
+        "owner/repo",
+        {
+            "id": 456,
+            "repository_selection": "selected",
+            "html_url": "https://github.com/settings/installations/456",
+        },
+        "token",
+    )
+
+    output = capsys.readouterr().out
+    assert "https://github.com/settings/installations/456" in output
+    assert prompts == ["Press Enter after updating the app installation: "]
+
+
+def test_prompt_existing_github_app_credentials(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    private_key = tmp_path / "app.pem"
+    private_key.write_text("private-key")
+    answers = iter(["client-id", str(private_key)])
+    monkeypatch.setattr(cli, "prompt_required_value", lambda _label: next(answers))
+
+    assert cli._prompt_existing_github_app_credentials() == cli.GitHubAppCredentials("client-id", "private-key")  # noqa: SLF001
+
+
+def test_provision_github_app_uses_existing_choice(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    app_file = tmp_path / "github-app.env"
+    credentials = cli.GitHubAppCredentials("client-id", "private-key")
+    calls: list[tuple[Any, ...]] = []
+
+    monkeypatch.setenv("GITHUB_APP_FILE", str(app_file))
+    monkeypatch.setattr(cli, "_github_app_values", lambda required=False: {})
+    monkeypatch.setattr(cli, "_select_github_app_setup_action", lambda _has_credentials: "existing")
+    monkeypatch.setattr(cli, "_prompt_existing_github_app_credentials", lambda: credentials)
+    monkeypatch.setattr(
+        cli,
+        "_ensure_existing_github_app",
+        lambda repo, token, creds: _append_call(calls, (repo, token, creds), "public-diary-automation"),
+    )
+
+    assert cli._provision_github_app("owner/repo", "token") == "public-diary-automation"  # noqa: SLF001
+    assert calls == [("owner/repo", "token", credentials)]
+
+
+def test_select_github_app_setup_action_renders_numbered_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, list[tuple[str, str]]]] = []
+
+    def fake_select(label: str, options: list[tuple[str, str]]) -> str:
+        calls.append((label, options))
+        return "existing"
+
+    monkeypatch.setattr(cli, "select_option", fake_select)
+
+    assert cli._select_github_app_setup_action(has_credentials=True) == "existing"  # noqa: SLF001
+    assert calls == [
+        (
+            "GitHub App setup",
+            [
+                ("create", "Create a new GitHub App"),
+                ("existing", f"Use existing GitHub App credentials from {github_app_file()} or environment"),
+            ],
+        ),
+    ]
 
 
 def test_prompt_github_app_installation_waits_for_confirmation(
