@@ -262,6 +262,7 @@ def cmd_configure_drive_access(_: argparse.Namespace | None) -> int:
         gcp_service_account=service_account,
         google_drive_root_folder_id=root_folder_id,
         google_drive_shared_drive_id=shared_drive_id,
+        google_workspace_delegation_enabled="",
         google_workspace_user="",
         google_drive_path="",
     )

@@ -38,6 +38,7 @@ Set these GitHub repository variables:
 - `GOOGLE_DRIVE_SHARED_DRIVE_ID`: Shared Drive ID containing the vault
 - `GOOGLE_DRIVE_ROOT_FOLDER_ID`: optional folder ID inside the drive to use as the vault root
 - `GOOGLE_DRIVE_PATH`: optional path inside the configured remote root, for example `obs-notes/obs-notes`
+- `GOOGLE_WORKSPACE_DELEGATION_ENABLED`: set to `true` only for My Drive/domain-wide delegation mode
 - `GOOGLE_WORKSPACE_USER`: optional Workspace user email for domain-wide delegation impersonation when reading from a
   user's My Drive instead of a Shared Drive
 
@@ -77,6 +78,7 @@ For this model:
 - configure Google Workspace domain-wide delegation for the service account
 - authorize only the scopes you need
 - set `GOOGLE_WORKSPACE_USER` to the delegated Workspace user
+- set `GOOGLE_WORKSPACE_DELEGATION_ENABLED` to `true`
 - keep the Drive scope at `drive.readonly` unless writes are required
 
 Use this only if the vault cannot be moved into a Shared Drive.
@@ -90,7 +92,7 @@ The workflow uses `google-github-actions/auth@v3` with:
 - `token_format: access_token`
 - `access_token_scopes: https://www.googleapis.com/auth/drive.readonly`
 - `access_token_lifetime: 3600s`
-- `access_token_subject`, only when `GOOGLE_WORKSPACE_USER` is set and no Shared Drive ID is configured
+- `access_token_subject`, only when `GOOGLE_WORKSPACE_DELEGATION_ENABLED` is `true`
 - `create_credentials_file: false`
 
 It then writes a minimal `rclone` config with that access token and runs:
