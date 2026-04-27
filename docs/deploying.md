@@ -89,7 +89,8 @@ No long-lived Google credential secret is required for the preferred setup.
 ## Runtime credentials
 
 The workflow uses `google-github-actions/auth` to mint an access token scoped to
-`https://www.googleapis.com/auth/drive.readonly`.
+`https://www.googleapis.com/auth/drive.readonly`. It only passes `access_token_subject` for My Drive/domain-wide
+delegation mode, when `GOOGLE_WORKSPACE_USER` is set and `GOOGLE_DRIVE_SHARED_DRIVE_ID` is blank.
 
 No Google application-default credentials file is generated in the job.
 

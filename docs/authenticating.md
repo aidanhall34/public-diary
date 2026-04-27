@@ -48,6 +48,7 @@ Set these GitHub repository variables:
 - a Workload Identity Pool and Provider that trust `https://token.actions.githubusercontent.com`
 - an IAM binding that allows the GitHub repo to impersonate the service account
 - an IAM binding that allows the service account to mint scoped access tokens for itself
+- for domain-wide delegation only, an IAM binding that allows the GitHub repo to create service account tokens
 
 ## Preferred storage model
 
@@ -89,6 +90,7 @@ The workflow uses `google-github-actions/auth@v3` with:
 - `token_format: access_token`
 - `access_token_scopes: https://www.googleapis.com/auth/drive.readonly`
 - `access_token_lifetime: 3600s`
+- `access_token_subject`, only when `GOOGLE_WORKSPACE_USER` is set and no Shared Drive ID is configured
 - `create_credentials_file: false`
 
 It then writes a minimal `rclone` config with that access token and runs:

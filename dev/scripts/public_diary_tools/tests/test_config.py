@@ -48,7 +48,7 @@ class FakeGoogle:
 def test_build_act_vars_derives_dynamic_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("ACT_VAR_FILE", str(tmp_path / "vars.env"))
     monkeypatch.setenv("GCP_PROJECT_ID", "proj")
-    answers: Iterator[str] = iter(["y", "1", "", ".", "1", "1", ""])
+    answers: Iterator[str] = iter(["y", "1", "", ".", "1", "1"])
 
     values = build_act_vars(FakeGoogle(), input_fn=lambda _: next(answers)).as_env()
 
@@ -76,7 +76,7 @@ def test_build_act_vars_prompts_for_shared_drive_when_none_visible(
 
     monkeypatch.setenv("ACT_VAR_FILE", str(tmp_path / "vars.env"))
     monkeypatch.setenv("GCP_PROJECT_ID", "proj")
-    answers: Iterator[str] = iter(["y", "1", ".", "1", "1", ""])
+    answers: Iterator[str] = iter(["y", "1", ".", "", "1", "1"])
 
     values = build_act_vars(NoDriveGoogle(), input_fn=lambda _: next(answers)).as_env()
 
@@ -107,7 +107,7 @@ def test_build_act_vars_allows_custom_shared_drive(
     monkeypatch.setenv("ACT_VAR_FILE", str(tmp_path / "vars.env"))
     monkeypatch.setenv("GCP_PROJECT_ID", "proj")
     monkeypatch.setenv("GOOGLE_DRIVE_SHARED_DRIVE_ID", "manual-drive")
-    answers: Iterator[str] = iter(["y", "", ".", "1", "1", ""])
+    answers: Iterator[str] = iter(["y", "", ".", "1", "1"])
 
     values = build_act_vars(NoDriveGoogle(), input_fn=lambda _: next(answers)).as_env()
 
@@ -241,7 +241,7 @@ def test_prompt_wif_defaults_allows_overrides(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setenv("ACT_VAR_FILE", str(tmp_path / "vars.env"))
     monkeypatch.setenv("GCP_PROJECT_ID", "proj")
     answers: Iterator[str] = iter(
-        ["n", "2", "deploy", "2", "pool", "2", "provider", "1", "", ".", "1", "1", ""],
+        ["n", "2", "deploy", "2", "pool", "2", "provider", "1", "", ".", "1", "1"],
     )
 
     values = build_act_vars(FakeGoogle(), input_fn=lambda _: next(answers)).as_env()
@@ -250,6 +250,21 @@ def test_prompt_wif_defaults_allows_overrides(monkeypatch: pytest.MonkeyPatch, t
     assert values["GCP_WORKLOAD_IDENTITY_PROVIDER"] == (
         "projects/123/locations/global/workloadIdentityPools/pool/providers/provider"
     )
+
+
+def test_build_act_vars_ignores_workspace_user_for_shared_drive(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ACT_VAR_FILE", str(tmp_path / "vars.env"))
+    monkeypatch.setenv("GCP_PROJECT_ID", "proj")
+    monkeypatch.setenv("GOOGLE_WORKSPACE_USER", "user@example.com")
+    answers: Iterator[str] = iter(["y", "1", "", ".", "1", "1"])
+
+    values = build_act_vars(FakeGoogle(), input_fn=lambda _: next(answers)).as_env()
+
+    assert values["GOOGLE_DRIVE_SHARED_DRIVE_ID"] == "drive-id"
+    assert values["GOOGLE_WORKSPACE_USER"] == ""
 
 
 def test_active_user_member(monkeypatch: pytest.MonkeyPatch) -> None:

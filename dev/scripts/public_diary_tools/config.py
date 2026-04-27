@@ -298,6 +298,26 @@ def build_act_vars(
         root_folder_id = drive_selection.root_folder_id
         drive_path = drive_selection.path
 
+    if shared_drive_id:
+        google_workspace_user = ""
+        if env_or_existing("GOOGLE_WORKSPACE_USER", existing):
+            info(
+                "Ignoring GOOGLE_WORKSPACE_USER because GOOGLE_DRIVE_SHARED_DRIVE_ID is set.",
+                output_fn=output_fn,
+            )
+    else:
+        google_workspace_user = prompt_setting(
+            "GOOGLE_WORKSPACE_USER",
+            current=env_or_existing("GOOGLE_WORKSPACE_USER", existing),
+            suggestions=[
+                ("", "No Workspace subject"),
+                (active_gcloud_account(), "Logged-in gcloud user"),
+            ],
+            input_fn=input_fn,
+            output_fn=output_fn,
+            custom_label="Custom Workspace user",
+        )
+
     return ActVars(
         gcp_workload_identity_provider=prompt_setting(
             "GCP_WORKLOAD_IDENTITY_PROVIDER",
@@ -319,17 +339,7 @@ def build_act_vars(
         ),
         google_drive_root_folder_id=root_folder_id,
         google_drive_shared_drive_id=shared_drive_id,
-        google_workspace_user=prompt_setting(
-            "GOOGLE_WORKSPACE_USER",
-            current=env_or_existing("GOOGLE_WORKSPACE_USER", existing),
-            suggestions=[
-                ("", "No Workspace subject"),
-                (active_gcloud_account(), "Logged-in gcloud user"),
-            ],
-            input_fn=input_fn,
-            output_fn=output_fn,
-            custom_label="Custom Workspace user",
-        ),
+        google_workspace_user=google_workspace_user,
         google_drive_path=drive_path,
     )
 
