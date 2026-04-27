@@ -172,10 +172,42 @@ The preferred Google Drive layout is a Shared Drive with the deploy service acco
 in a user's My Drive, configure Google Workspace domain-wide delegation separately, set
 `GOOGLE_WORKSPACE_DELEGATION_ENABLED=true`, and set `GOOGLE_WORKSPACE_USER`.
 
+## GitHub App Authentication
+
+The batch command checks local GitHub App credentials first. If the app is already installed on this repository with
+the required permissions, the create/install step is skipped. To run only the GitHub App step:
+
+```sh
+make python-tool ARGS="provision-github-app"
+```
+
+When setup is still needed, the command presents a numbered choice to create a new app or use an existing app. For an
+existing app, the tool checks the installation permissions and repository access mapping. If the app is installed for
+the owner but this repository is not included in a selected-repositories mapping, it attempts to add the repository and
+falls back to a browser prompt if GitHub rejects the API request.
+
+When creating a new app, the command prints a local `127.0.0.1` start URL. Open that URL in your browser; it serves a
+small form that posts the manifest to GitHub and starts a local callback listener. After GitHub creates the app, it
+redirects back to the local callback with a temporary code. The tool converts that code into an app private key,
+prompts you to install the app, uploads `PUBLIC_DIARY_APP_CLIENT_ID` and `PUBLIC_DIARY_APP_PRIVATE_KEY` to repository
+secrets, and writes `dev/act/github-app.env` for local `act` runs.
+
+Set these GitHub App repository permissions:
+
+- Actions: read-only. Lets workflow-created app tokens read Actions metadata.
+- Contents: read and write. Required for repository checkout, release metadata, committing synced vault notes, and
+  pushing wiki/docs changes.
+- Metadata: read-only. Required by GitHub for all GitHub Apps.
+- Pages: read and write. Required by `actions/configure-pages` and `actions/deploy-pages`.
+- Pull requests: read and write. Required when the deploy workflow opens or finds the automated vault sync PR.
+
+No organization permissions, account permissions, webhook events, or webhook URL are required for this repository. The
+tool-generated manifest omits webhook configuration.
+
 ## GitHub Secrets
 
-The batch command handles GitHub secret setup. To run only the secret steps, create the optional local Discord webhook
-file and upload secrets. The tool always uploads `PAGES_ADMIN_TOKEN` from `gh auth token`, and uploads
+To run only the remaining secret steps, create the optional local Discord webhook file and upload secrets. The tool
+uploads the GitHub App credentials from `dev/act/github-app.env` or matching environment variables, and uploads
 `DISCORD_WEBHOOK_URL` when the webhook is configured:
 
 ```sh
@@ -202,6 +234,7 @@ This writes ignored local files under `dev/act/`:
 - `secrets.env`
 - `google-drive-access-token`
 - `discord-webhook-url`
+- `github-app.env`
 
 ## Validate Locally
 

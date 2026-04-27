@@ -28,26 +28,33 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    env:
-      PAGES_ADMIN_TOKEN: ${{ secrets.PAGES_ADMIN_TOKEN }}
     outputs:
       should_publish: ${{ steps.vault-changes.outputs.should_publish }}
     steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.PUBLIC_DIARY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PUBLIC_DIARY_APP_PRIVATE_KEY }}
+          permission-actions: read
+          permission-contents: write
+          permission-pages: write
+          permission-pull-requests: write
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure GitHub Pages
-        if: ${{ env.ACT != 'true' && env.PAGES_ADMIN_TOKEN != '' }}
+        if: ${{ env.ACT != 'true' }}
         uses: actions/configure-pages@v5
         with:
-          token: ${{ env.PAGES_ADMIN_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           enablement: true
-
-      - name: Configure GitHub Pages
-        if: ${{ env.ACT != 'true' && env.PAGES_ADMIN_TOKEN == '' }}
-        uses: actions/configure-pages@v5
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
@@ -78,7 +85,10 @@ jobs:
         if: >-
           ${{
             env.ACT != 'true' &&
-            vars.GOOGLE_WORKSPACE_DELEGATION_ENABLED != 'true'
+            (
+              vars.GOOGLE_WORKSPACE_DELEGATION_ENABLED != 'true' ||
+              vars.GOOGLE_WORKSPACE_USER == ''
+            )
           }}
         id: auth
         uses: google-github-actions/auth@v3
@@ -98,6 +108,7 @@ jobs:
             vars.GOOGLE_WORKSPACE_USER != ''
           }}
         id: auth_dwd
+        continue-on-error: true
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -108,6 +119,35 @@ jobs:
           access_token_subject: ${{ vars.GOOGLE_WORKSPACE_USER }}
           create_credentials_file: false
 
+      - name: Authenticate to Google Cloud without Workspace delegation
+        if: >-
+          ${{
+            env.ACT != 'true' &&
+            steps.auth_dwd.outcome == 'failure'
+          }}
+        id: auth_fallback
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/drive.readonly
+          access_token_lifetime: 3600s
+          create_credentials_file: false
+
+      - name: Warn about Workspace delegation fallback
+        if: >-
+          ${{
+            env.ACT != 'true' &&
+            steps.auth_dwd.outcome == 'failure'
+          }}
+        run: |
+          cat >> "${GITHUB_STEP_SUMMARY}" <<'EOF'
+          Google Workspace delegated authentication failed, so the workflow retried with normal Workload Identity
+          Federation. If the vault is in a user's My Drive, share the folder with the service account or configure
+          domain-wide delegation in Google Workspace Admin Console for the Drive readonly scope.
+          EOF
+
       - name: Install rclone
         run: |
           curl https://rclone.org/install.sh | sudo bash
@@ -116,8 +156,9 @@ jobs:
         env:
           GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ vars.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
           GOOGLE_DRIVE_SHARED_DRIVE_ID: ${{ vars.GOOGLE_DRIVE_SHARED_DRIVE_ID }}
-          GOOGLE_DRIVE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token ||
-            steps.auth_dwd.outputs.access_token ||
+          GOOGLE_DRIVE_ACCESS_TOKEN: ${{ steps.auth_dwd.outputs.access_token ||
+            steps.auth.outputs.access_token ||
+            steps.auth_fallback.outputs.access_token ||
             secrets.GOOGLE_DRIVE_ACCESS_TOKEN }}
         run: |
           mkdir -p ~/.config/rclone
@@ -168,18 +209,19 @@ jobs:
           steps.vault-changes.outputs.should_publish == 'true' &&
           steps.vault-changes.outputs.vault_changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.PAGES_ADMIN_TOKEN || github.token }}
-          PUSH_TOKEN: ${{ secrets.PAGES_ADMIN_TOKEN || github.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PUSH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bot_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${bot_id}+${APP_SLUG}[bot]@users.noreply.github.com"
           git add vault
           if git diff --cached --quiet -- vault; then
             echo "Vault changes already committed."
             exit 0
           fi
           git commit -m "chore: sync vault notes" -m "Model-version: github-actions"
-
           sync_branch="${GITHUB_REF_NAME}"
           if [ "${GITHUB_REF_NAME}" = "main" ]; then
             sync_branch="automation/sync-vault-notes"
@@ -224,19 +266,32 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.PUBLIC_DIARY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PUBLIC_DIARY_APP_PRIVATE_KEY }}
+          permission-pages: write
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
   notify-failure:
     needs:
       - build
       - deploy
-    if: ${{ always() }}
+    if: ${{ always() && (contains(needs.*.result, 'failure') ||
+      contains(needs.*.result, 'cancelled')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
@@ -246,6 +301,5 @@ jobs:
       - name: Notify Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          GITHUB_TOKEN: ${{ github.token }}
           DISCORD_JOB_RESULTS: "build=${{ needs.build.result }}, deploy=${{ needs.deploy.result }}"
         run: make python-tool ARGS=notify-discord

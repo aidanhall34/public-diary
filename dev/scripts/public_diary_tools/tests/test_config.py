@@ -86,7 +86,7 @@ def test_build_act_vars_prompts_for_shared_drive_when_none_visible(
     assert values["GOOGLE_WORKSPACE_DELEGATION_ENABLED"] == ""
 
 
-def test_build_act_vars_enables_workspace_delegation_for_my_drive_user(
+def test_build_act_vars_keeps_workspace_delegation_disabled_without_existing_opt_in(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -105,8 +105,58 @@ def test_build_act_vars_enables_workspace_delegation_for_my_drive_user(
     values = build_act_vars(NoDriveGoogle(), input_fn=lambda _: next(answers)).as_env()
 
     assert values["GOOGLE_DRIVE_SHARED_DRIVE_ID"] == ""
+    assert values["GOOGLE_WORKSPACE_DELEGATION_ENABLED"] == ""
+    assert values["GOOGLE_WORKSPACE_USER"] == "user@example.com"
+
+
+def test_build_act_vars_keeps_workspace_delegation_for_existing_workspace_user(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class NoDriveGoogle(FakeGoogle):
+        def list_shared_drives(self) -> list[tuple[str, str]]:
+            return []
+
+        def list_top_level_folders(self, shared_drive_id: str) -> list[tuple[str, str]]:
+            return []
+
+    var_file = tmp_path / "vars.env"
+    var_file.write_text("GOOGLE_WORKSPACE_DELEGATION_ENABLED=true\n")
+    monkeypatch.setenv("ACT_VAR_FILE", str(var_file))
+    monkeypatch.setenv("GCP_PROJECT_ID", "proj")
+    monkeypatch.setenv("GOOGLE_WORKSPACE_USER", "user@example.com")
+    answers: Iterator[str] = iter(["y", "1", ".", "1", "1"])
+
+    values = build_act_vars(NoDriveGoogle(), input_fn=lambda _: next(answers)).as_env()
+
+    assert values["GOOGLE_DRIVE_SHARED_DRIVE_ID"] == ""
     assert values["GOOGLE_WORKSPACE_DELEGATION_ENABLED"] == "true"
     assert values["GOOGLE_WORKSPACE_USER"] == "user@example.com"
+
+
+def test_build_act_vars_disables_workspace_delegation_for_gmail_user(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class NoDriveGoogle(FakeGoogle):
+        def list_shared_drives(self) -> list[tuple[str, str]]:
+            return []
+
+        def list_top_level_folders(self, shared_drive_id: str) -> list[tuple[str, str]]:
+            return []
+
+    var_file = tmp_path / "vars.env"
+    var_file.write_text("GOOGLE_WORKSPACE_DELEGATION_ENABLED=true\n")
+    monkeypatch.setenv("ACT_VAR_FILE", str(var_file))
+    monkeypatch.setenv("GCP_PROJECT_ID", "proj")
+    monkeypatch.setenv("GOOGLE_WORKSPACE_USER", "user@gmail.com")
+    answers: Iterator[str] = iter(["y", "1", ".", "1", "1"])
+
+    values = build_act_vars(NoDriveGoogle(), input_fn=lambda _: next(answers)).as_env()
+
+    assert values["GOOGLE_DRIVE_SHARED_DRIVE_ID"] == ""
+    assert values["GOOGLE_WORKSPACE_DELEGATION_ENABLED"] == ""
+    assert values["GOOGLE_WORKSPACE_USER"] == "user@gmail.com"
 
 
 def test_build_act_vars_allows_custom_shared_drive(

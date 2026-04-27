@@ -10,17 +10,18 @@ The site is built with Quartz and deployed to GitHub Pages from GitHub Actions.
 
 ## Build flow
 
-1. Check out the repository.
-2. Configure GitHub Pages.
-3. Install Node.js.
-4. Mint a short-lived Google Drive read-only token with GitHub OIDC and Workload Identity Federation.
-5. Install `rclone`.
-6. Build a temporary `rclone` config that uses the Drive read-only token.
-7. Sync Drive into `vault/`.
-8. Run `make quartz-build`.
-9. Commit any resulting `vault/` changes back to the workflow branch.
-10. Upload `quartz/public` as the Pages artifact.
-11. Deploy the artifact to GitHub Pages.
+1. Mint a short-lived GitHub App installation token.
+2. Check out the repository with the GitHub App token.
+3. Configure GitHub Pages with the GitHub App token.
+4. Install Node.js.
+5. Mint a short-lived Google Drive read-only token with GitHub OIDC and Workload Identity Federation.
+6. Install `rclone`.
+7. Build a temporary `rclone` config that uses the Drive read-only token.
+8. Sync Drive into `vault/`.
+9. Run `make quartz-build`.
+10. Commit any resulting `vault/` changes back to the workflow branch.
+11. Upload `quartz/public` as the Pages artifact.
+12. Deploy the artifact to GitHub Pages with the GitHub App token.
 
 ## Local preview
 
@@ -57,6 +58,7 @@ first thing to revisit.
 - GitHub Pages enabled for Actions deployments
 - Google Workload Identity Federation configured
 - Google Drive variables configured
+- GitHub App credentials configured in repository secrets
 - the workflow service account can read the target Shared Drive or delegated My Drive location
 
 ## Google Drive access model
@@ -89,7 +91,15 @@ Set these repository variables:
 
 No long-lived Google credential secret is required for the preferred setup.
 
+Set these repository secrets:
+
+- `PUBLIC_DIARY_APP_CLIENT_ID`
+- `PUBLIC_DIARY_APP_PRIVATE_KEY`
+- `DISCORD_WEBHOOK_URL` when Discord notifications are enabled
+
 ## Runtime credentials
+
+GitHub repository operations use installation tokens from the configured GitHub App.
 
 The workflow uses `google-github-actions/auth` to mint an access token scoped to
 `https://www.googleapis.com/auth/drive.readonly`. It only passes `access_token_subject` when

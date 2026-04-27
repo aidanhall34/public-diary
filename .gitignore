@@ -10,3 +10,4 @@ dev/scripts/test_out/
 dev/act/*.env
 dev/act/discord-webhook-url
 dev/act/google-drive-access-token
+dev/act/github-app.env
