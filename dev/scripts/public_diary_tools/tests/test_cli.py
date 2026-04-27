@@ -626,6 +626,14 @@ def test_write_commands_doc_uses_command_docstrings(monkeypatch: pytest.MonkeyPa
     assert "## Provisioning notes" in output
 
 
+def test_python_tool_command_docs_use_fixed_width(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COLUMNS", "20")
+
+    output = cli._render_python_tool_commands()  # noqa: SLF001
+
+    assert "Discover Drive values and provision Google, GitHub, Discord, and local act\ninputs." in output
+
+
 def test_make_target_discovery_handles_missing_files(tmp_path: Path) -> None:
     makefile = tmp_path / "Makefile"
     makefile.write_text("include missing.mk\n.PHONY: setup\n")

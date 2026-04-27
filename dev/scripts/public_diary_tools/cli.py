@@ -44,6 +44,7 @@ REQUIRED_APIS = [
 ]
 
 COMMANDS_DOC_TEMPLATE = Path(__file__).with_name("templates") / "commands.md.template"
+COMMANDS_DOC_WIDTH = 78
 ROOT_MAKEFILE = Path("Makefile")
 LOG_LEVEL_ENV_NAMES = ("PUBLIC_DIARY_LOG_LEVEL", "LOG_LEVEL")
 LOGGER = logging.getLogger(__name__)
@@ -521,12 +522,18 @@ def _render_common_commands() -> str:
     return "\n".join(f"- `make {target}`" for target in _make_targets())
 
 
+class CommandsDocHelpFormatter(argparse.HelpFormatter):
+    def __init__(self, prog: str) -> None:
+        super().__init__(prog, width=COMMANDS_DOC_WIDTH)
+
+
 def _render_python_tool_commands() -> str:
     sections = []
     for command, function in _command_functions().items():
         parser = argparse.ArgumentParser(
             prog=f"public-diary-tools {command}",
             description=_first_doc_line(function),
+            formatter_class=CommandsDocHelpFormatter,
         )
         sections.append(f"### `{command}`\n\n```text\n{parser.format_help().strip()}\n```")
     return "\n\n".join(sections)
