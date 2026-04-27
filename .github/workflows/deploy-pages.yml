@@ -280,12 +280,11 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-  notify-failure:
+  notify:
     needs:
       - build
       - deploy
-    if: ${{ always() && (contains(needs.*.result, 'failure') ||
-      contains(needs.*.result, 'cancelled')) }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
