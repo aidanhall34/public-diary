@@ -6,6 +6,11 @@
     "allow_squash_merge": true,
     "delete_branch_on_merge": true
   },
+  "pages": {
+    "build_type": "workflow",
+    "cname": "notes.ah34.net",
+    "https_enforced": true
+  },
   "branches": {
     "main": {
       "required_status_checks": {

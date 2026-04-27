@@ -13,12 +13,20 @@ from public_diary_tools.progress import track_web_request
 DEFAULT_SETTINGS_FILE = Path(".github/config/repository-permissions.json")
 
 
+class GitHubNotFoundError(RuntimeError):
+    """GitHub returned 404 for a repository settings request."""
+
+
 class GitHubSettingsApi(Protocol):
     def default_branch(self) -> str: ...
 
     def branch_exists(self, branch: str) -> bool: ...
 
     def patch_repository(self, settings: dict[str, Any]) -> None: ...
+
+    def create_pages(self, settings: dict[str, Any]) -> None: ...
+
+    def update_pages(self, settings: dict[str, Any]) -> None: ...
 
     def put_branch_protection(self, branch: str, settings: dict[str, Any]) -> None: ...
 
@@ -54,7 +62,7 @@ class GitHubSettingsClient:
             response.raise_for_status()
         except HTTPError as exc:
             if response.status_code == 404:
-                raise RuntimeError(
+                raise GitHubNotFoundError(
                     "GitHub returned 404 while applying repository settings. "
                     "Confirm the repository exists, the branch exists, and your GitHub token has repository "
                     "administration permission. Run `gh auth refresh -s repo -s workflow` and ensure your user "
@@ -79,6 +87,16 @@ class GitHubSettingsClient:
 
     def patch_repository(self, settings: dict[str, Any]) -> None:
         self._request("PATCH", "", settings)
+
+    def create_pages(self, settings: dict[str, Any]) -> None:
+        self._request("POST", "/pages", settings)
+
+    def update_pages(self, settings: dict[str, Any]) -> None:
+        try:
+            self._request("PUT", "/pages", settings)
+        except GitHubNotFoundError:
+            self.create_pages({"build_type": str(settings.get("build_type", "workflow"))})
+            self._request("PUT", "/pages", settings)
 
     def put_branch_protection(self, branch: str, settings: dict[str, Any]) -> None:
         self._request("PUT", f"/branches/{branch}/protection", settings)
@@ -108,6 +126,13 @@ def apply_github_settings(settings: dict[str, Any], client: GitHubSettingsApi) -
     if repository_settings:
         client.patch_repository(repository_settings)
         applied.append("repository")
+
+    pages_settings = settings.get("pages", {})
+    if not isinstance(pages_settings, dict):
+        raise TypeError("pages settings must be an object")
+    if pages_settings:
+        client.update_pages(pages_settings)
+        applied.append("pages")
 
     branch_settings = settings.get("branches", {})
     if not isinstance(branch_settings, dict):

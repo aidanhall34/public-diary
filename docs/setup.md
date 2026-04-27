@@ -158,13 +158,15 @@ Upload repository variables from `dev/act/vars.env` if you later edit that file:
 make python-tool ARGS="upload-github-vars"
 ```
 
-Apply repository settings and main branch protection from `.github/config/repository-permissions.json`:
+Apply repository settings, GitHub Pages settings, and main branch protection from
+`.github/config/repository-permissions.json`:
 
 ```sh
 make python-tool ARGS="apply-github-settings"
 ```
 
-This config requires the pull request validation `lint` and `test` checks before merging to `main`.
+This config sets the Pages custom domain to `notes.ah34.net`, enforces HTTPS for Pages, and requires the pull request
+validation `lint` and `test` checks before merging to `main`.
 
 The preferred Google Drive layout is a Shared Drive with the deploy service account as a reader. If the vault must stay
 in a user's My Drive, configure Google Workspace domain-wide delegation separately, set
