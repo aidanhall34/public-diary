@@ -171,11 +171,27 @@ jobs:
           team_drive = ${GOOGLE_DRIVE_SHARED_DRIVE_ID}
           EOF
 
+      - name: Resolve Google Drive vault path
+        id: drive-path
+        env:
+          GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ vars.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
+          GOOGLE_DRIVE_PATH: ${{ vars.GOOGLE_DRIVE_PATH }}
+        run: |
+          drive_path="${GOOGLE_DRIVE_PATH}"
+
+          if [ -n "${GOOGLE_DRIVE_ROOT_FOLDER_ID}" ] && [ -z "${drive_path}" ]; then
+            drive_path=""
+          elif [ -z "${GOOGLE_DRIVE_ROOT_FOLDER_ID}" ] && [ -z "${drive_path}" ]; then
+            drive_path="obs-notes/obs-notes/"
+          fi
+
+          echo "google_drive_path=${drive_path}" >> "${GITHUB_OUTPUT}"
+
       - name: Pull latest vault contents
         env:
           GOOGLE_DRIVE_REMOTE: vault
-          GOOGLE_DRIVE_PATH: ${{ vars.GOOGLE_DRIVE_PATH }}
-        run: make notes-clone
+          GOOGLE_DRIVE_PATH: ${{ steps.drive-path.outputs.google_drive_path }}
+        run: make notes-clone GOOGLE_DRIVE_PATH="${GOOGLE_DRIVE_PATH}"
 
       - name: Detect vault changes
         id: vault-changes
