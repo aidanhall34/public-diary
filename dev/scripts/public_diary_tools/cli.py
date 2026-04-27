@@ -161,10 +161,11 @@ def cmd_write_discord_webhook(_: argparse.Namespace | None) -> int:
 
 
 def cmd_upload_github_secrets(_: argparse.Namespace | None) -> int:
-    """Upload repository secrets such as DISCORD_WEBHOOK_URL."""
-    webhook = _discord_webhook_value()
-    asyncio.run(_upload_discord_secret(webhook, repository_from_gh(), github_token_from_gh()))
-    print("Uploaded DISCORD_WEBHOOK_URL.")
+    """Upload GitHub repository secrets used by workflows."""
+    token = github_token_from_gh()
+    secrets = _github_secret_values(token)
+    asyncio.run(_upload_github_secrets(secrets, repository_from_gh(), token))
+    print(f"Uploaded GitHub secrets: {', '.join(sorted(secrets))}.")
     return 0
 
 
@@ -181,7 +182,8 @@ def cmd_write_act_files(_: argparse.Namespace | None) -> int:
     if not act_var_file().exists():
         raise RuntimeError(f'Missing {act_var_file()}. Run make python-tool ARGS="write-act-vars" first.')
 
-    values = {"GITHUB_TOKEN": github_token_from_gh()}
+    github_token = github_token_from_gh()
+    values = {"GITHUB_TOKEN": github_token, "PAGES_ADMIN_TOKEN": github_token}
     if discord_webhook_file().exists():
         values["DISCORD_WEBHOOK_URL"] = discord_webhook_file().read_text().strip()
     if google_drive_token_file().exists():
@@ -259,8 +261,9 @@ async def _upload_github_vars(values: dict[str, str], repo: str, token: str) -> 
     await asyncio.gather(*(_run_sync(client.set_variable, name, value) for name, value in values.items()))
 
 
-async def _upload_discord_secret(webhook: str, repo: str, token: str) -> None:
-    await _run_sync(GithubClient(repo, token).set_secret, "DISCORD_WEBHOOK_URL", webhook)
+async def _upload_github_secrets(values: dict[str, str], repo: str, token: str) -> None:
+    client = GithubClient(repo, token)
+    await asyncio.gather(*(_run_sync(client.set_secret, name, value) for name, value in values.items()))
 
 
 async def _apply_github_settings(repo: str, token: str) -> list[str]:
@@ -281,6 +284,20 @@ def _discord_webhook_value() -> str:
     if not webhook:
         raise RuntimeError(f"DISCORD_WEBHOOK_URL is required or {discord_webhook_file()} must exist.")
     return webhook
+
+
+def _optional_discord_webhook_value() -> str:
+    return os.environ.get("DISCORD_WEBHOOK_URL") or (
+        discord_webhook_file().read_text().strip() if discord_webhook_file().exists() else ""
+    )
+
+
+def _github_secret_values(github_token: str, webhook: str = "") -> dict[str, str]:
+    values = {"PAGES_ADMIN_TOKEN": github_token}
+    webhook = webhook or _optional_discord_webhook_value()
+    if webhook:
+        values["DISCORD_WEBHOOK_URL"] = webhook
+    return values
 
 
 def _write_discord_webhook_file(webhook: str) -> None:
@@ -389,7 +406,7 @@ async def _provision_all_async(google: GoogleApis, act_vars: ActVars, repo: str,
         _upload_github_vars(act_vars.as_env(), repo, token),
         _apply_github_settings(repo, token),
         _run_sync(_write_discord_webhook_file, webhook),
-        _upload_discord_secret(webhook, repo, token),
+        _upload_github_secrets(_github_secret_values(token, webhook), repo, token),
         _run_sync(_grant_drive_access, google, act_vars),
     )
 

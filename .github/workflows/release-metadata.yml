@@ -44,18 +44,6 @@ jobs:
       - name: Generate coverage badge
         run: make coverage-badge
 
-      - name: Commit coverage badge
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md docs/README.md docs/images/coverage.svg
-          if git diff --cached --quiet; then
-            echo "Coverage badge already up to date."
-          else
-            git commit -m "test: update coverage badge [skip ci]"
-            git push
-          fi
-
       - name: Generate tag and changelog
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -14,6 +14,7 @@ from public_diary_tools.github_settings import (
 class FakeGitHub:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
+        self.rulesets: list[dict[str, Any]] = []
 
     def default_branch(self) -> str:
         return "main"
@@ -26,6 +27,19 @@ class FakeGitHub:
 
     def put_branch_protection(self, branch: str, settings: dict[str, Any]) -> None:
         self.calls.append(("branch", branch, settings))
+
+    def list_rulesets(self) -> list[dict[str, Any]]:
+        self.calls.append(("rulesets", "", {}))
+        return self.rulesets
+
+    def create_ruleset(self, settings: dict[str, Any]) -> None:
+        self.calls.append(("create-ruleset", "", settings))
+
+    def update_ruleset(self, ruleset_id: int, settings: dict[str, Any]) -> None:
+        self.calls.append(("update-ruleset", str(ruleset_id), settings))
+
+    def delete_ruleset(self, ruleset_id: int) -> None:
+        self.calls.append(("delete-ruleset", str(ruleset_id), {}))
 
 
 def test_load_github_settings(tmp_path: Path) -> None:
@@ -40,12 +54,46 @@ def test_apply_github_settings() -> None:
     settings = {
         "repository": {"delete_branch_on_merge": True},
         "branches": {"main": {"enforce_admins": True}},
+        "rulesets": [{"name": "main pull request reviews"}],
     }
 
-    assert apply_github_settings(settings, client) == ["repository", "branch:main"]
+    assert apply_github_settings(settings, client) == [
+        "repository",
+        "branch:main",
+        "ruleset:main pull request reviews",
+    ]
     assert client.calls == [
         ("repo", "", {"delete_branch_on_merge": True}),
         ("branch", "main", {"enforce_admins": True}),
+        ("rulesets", "", {}),
+        ("create-ruleset", "", {"name": "main pull request reviews"}),
+    ]
+
+
+def test_apply_github_settings_updates_existing_rulesets() -> None:
+    client = FakeGitHub()
+    client.rulesets = [{"id": 42, "name": "main pull request reviews"}]
+    settings = {"rulesets": [{"name": "main pull request reviews", "enforcement": "active"}]}
+
+    assert apply_github_settings(settings, client) == ["ruleset:main pull request reviews"]
+    assert client.calls == [
+        ("rulesets", "", {}),
+        ("update-ruleset", "42", {"name": "main pull request reviews", "enforcement": "active"}),
+    ]
+
+
+def test_apply_github_settings_deletes_named_rulesets() -> None:
+    client = FakeGitHub()
+    client.rulesets = [
+        {"id": 41, "name": "main"},
+        {"id": 42, "name": "main pull request reviews"},
+    ]
+    settings = {"delete_rulesets": ["main", "missing"]}
+
+    assert apply_github_settings(settings, client) == ["delete-ruleset:main"]
+    assert client.calls == [
+        ("rulesets", "", {}),
+        ("delete-ruleset", "41", {}),
     ]
 
 
@@ -58,7 +106,12 @@ def test_github_settings_client_requests(monkeypatch: pytest.MonkeyPatch) -> Non
         def raise_for_status(self) -> None:
             calls.append(("raise_for_status",))
 
-        def json(self) -> dict[str, str]:
+        def __init__(self, url: str) -> None:
+            self.url = url
+
+        def json(self) -> dict[str, str] | list[dict[str, str | int]]:
+            if self.url.endswith("/rulesets"):
+                return [{"id": 42, "name": "main pull request reviews"}]
             return {"default_branch": "main"}
 
     def fake_request(
@@ -69,7 +122,7 @@ def test_github_settings_client_requests(monkeypatch: pytest.MonkeyPatch) -> Non
         timeout: int,
     ) -> FakeResponse:
         calls.append((method, url, headers, json, timeout))
-        return FakeResponse()
+        return FakeResponse(url)
 
     monkeypatch.setattr("public_diary_tools.github_settings.requests.request", fake_request)
 
@@ -80,6 +133,10 @@ def test_github_settings_client_requests(monkeypatch: pytest.MonkeyPatch) -> Non
     )
     client.patch_repository({"delete_branch_on_merge": True})
     client.put_branch_protection("main", {"enforce_admins": True})
+    assert client.list_rulesets() == [{"id": 42, "name": "main pull request reviews"}]
+    client.create_ruleset({"name": "new ruleset"})
+    client.update_ruleset(42, {"name": "main pull request reviews"})
+    client.delete_ruleset(42)
     assert client.default_branch() == "main"
     assert client.branch_exists("main")
 
@@ -105,6 +162,54 @@ def test_github_settings_client_requests(monkeypatch: pytest.MonkeyPatch) -> Non
                 "X-GitHub-Api-Version": "2022-11-28",
             },
             {"enforce_admins": True},
+            30,
+        ),
+        ("raise_for_status",),
+        (
+            "GET",
+            "https://api.example.test/repos/owner/repo/rulesets",
+            {
+                "Accept": "application/vnd.github+json",
+                "Authorization": "Bearer github-token",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            None,
+            30,
+        ),
+        ("raise_for_status",),
+        (
+            "POST",
+            "https://api.example.test/repos/owner/repo/rulesets",
+            {
+                "Accept": "application/vnd.github+json",
+                "Authorization": "Bearer github-token",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            {"name": "new ruleset"},
+            30,
+        ),
+        ("raise_for_status",),
+        (
+            "PUT",
+            "https://api.example.test/repos/owner/repo/rulesets/42",
+            {
+                "Accept": "application/vnd.github+json",
+                "Authorization": "Bearer github-token",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            {"name": "main pull request reviews"},
+            30,
+        ),
+        ("raise_for_status",),
+        (
+            "DELETE",
+            "https://api.example.test/repos/owner/repo/rulesets/42",
+            {
+                "Accept": "application/vnd.github+json",
+                "Authorization": "Bearer github-token",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            None,
             30,
         ),
         ("raise_for_status",),
@@ -145,6 +250,18 @@ def test_apply_github_settings_rejects_invalid_shapes() -> None:
 
     with pytest.raises(TypeError, match="branch protection"):
         apply_github_settings({"branches": {"main": []}}, client)
+
+    with pytest.raises(TypeError, match="rulesets"):
+        apply_github_settings({"rulesets": {}}, client)
+
+    with pytest.raises(TypeError, match="rulesets"):
+        apply_github_settings({"rulesets": [{}]}, client)
+
+    with pytest.raises(TypeError, match="delete_rulesets"):
+        apply_github_settings({"delete_rulesets": {}}, client)
+
+    with pytest.raises(TypeError, match="delete_rulesets"):
+        apply_github_settings({"delete_rulesets": [1]}, client)
 
     with pytest.raises(RuntimeError, match="branch not found"):
         apply_github_settings({"branches": {"missing": {}}}, client)

@@ -20,6 +20,14 @@ class GitHubSettingsApi(Protocol):
 
     def put_branch_protection(self, branch: str, settings: dict[str, Any]) -> None: ...
 
+    def list_rulesets(self) -> list[dict[str, Any]]: ...
+
+    def create_ruleset(self, settings: dict[str, Any]) -> None: ...
+
+    def update_ruleset(self, ruleset_id: int, settings: dict[str, Any]) -> None: ...
+
+    def delete_ruleset(self, ruleset_id: int) -> None: ...
+
 
 @dataclass
 class GitHubSettingsClient:
@@ -27,7 +35,7 @@ class GitHubSettingsClient:
     token: str
     base_url: str = "https://api.github.com"
 
-    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
         response = requests.request(
             method,
             f"{self.base_url}/repos/{self.repository}{path}",
@@ -51,12 +59,12 @@ class GitHubSettingsClient:
                 ) from exc
             raise
         try:
-            return cast(dict[str, Any], response.json())
+            return response.json()
         except ValueError:
             return {}
 
     def default_branch(self) -> str:
-        response = self._request("GET", "")
+        response = cast(dict[str, Any], self._request("GET", ""))
         return str(response.get("default_branch", "main"))
 
     def branch_exists(self, branch: str) -> bool:
@@ -71,6 +79,18 @@ class GitHubSettingsClient:
 
     def put_branch_protection(self, branch: str, settings: dict[str, Any]) -> None:
         self._request("PUT", f"/branches/{branch}/protection", settings)
+
+    def list_rulesets(self) -> list[dict[str, Any]]:
+        return cast(list[dict[str, Any]], self._request("GET", "/rulesets"))
+
+    def create_ruleset(self, settings: dict[str, Any]) -> None:
+        self._request("POST", "/rulesets", settings)
+
+    def update_ruleset(self, ruleset_id: int, settings: dict[str, Any]) -> None:
+        self._request("PUT", f"/rulesets/{ruleset_id}", settings)
+
+    def delete_ruleset(self, ruleset_id: int) -> None:
+        self._request("DELETE", f"/rulesets/{ruleset_id}")
 
 
 def load_github_settings(path: Path = DEFAULT_SETTINGS_FILE) -> dict[str, Any]:
@@ -101,4 +121,40 @@ def apply_github_settings(settings: dict[str, Any], client: GitHubSettingsApi) -
             )
         client.put_branch_protection(branch, protection)
         applied.append(f"branch:{branch}")
+
+    rulesets = settings.get("rulesets", [])
+    if not isinstance(rulesets, list):
+        raise TypeError("rulesets settings must be an array")
+    if rulesets:
+        existing_rulesets = {
+            str(ruleset["name"]): int(ruleset["id"])
+            for ruleset in client.list_rulesets()
+            if isinstance(ruleset.get("name"), str) and isinstance(ruleset.get("id"), int)
+        }
+        for ruleset in rulesets:
+            if not isinstance(ruleset, dict) or not isinstance(ruleset.get("name"), str):
+                raise TypeError("rulesets settings must be named objects")
+            ruleset_name = str(ruleset["name"])
+            if ruleset_name in existing_rulesets:
+                client.update_ruleset(existing_rulesets[ruleset_name], ruleset)
+            else:
+                client.create_ruleset(ruleset)
+            applied.append(f"ruleset:{ruleset_name}")
+
+    delete_rulesets = settings.get("delete_rulesets", [])
+    if not isinstance(delete_rulesets, list):
+        raise TypeError("delete_rulesets settings must be an array")
+    if delete_rulesets:
+        rulesets_by_name = {
+            str(ruleset["name"]): int(ruleset["id"])
+            for ruleset in client.list_rulesets()
+            if isinstance(ruleset.get("name"), str) and isinstance(ruleset.get("id"), int)
+        }
+        for ruleset_name in delete_rulesets:
+            if not isinstance(ruleset_name, str):
+                raise TypeError("delete_rulesets settings must contain names")
+            ruleset_id = rulesets_by_name.get(ruleset_name)
+            if ruleset_id is not None:
+                client.delete_ruleset(ruleset_id)
+                applied.append(f"delete-ruleset:{ruleset_name}")
     return applied

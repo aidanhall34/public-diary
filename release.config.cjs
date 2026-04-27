@@ -18,23 +18,6 @@ module.exports = {
         preset: "conventionalcommits",
       },
     ],
-    [
-      "@semantic-release/changelog",
-      {
-        changelogFile: "CHANGELOG.md",
-      },
-    ],
-    [
-      "@semantic-release/git",
-      {
-        assets: [
-          "CHANGELOG.md",
-          "README.md",
-          "docs/README.md",
-          "docs/images/coverage.svg",
-        ],
-        message: "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}",
-      },
-    ],
+    "@semantic-release/github",
   ],
 };
