@@ -21,3 +21,5 @@ A repo to manage deployment of my obsidian notes to github pages.
 - Code must be linted with `ruff` the `make lint` command on change.
 - Code must be tested with `make pytests`.
 - Python code is type checked with `mypy`
+- Commit changes to the repo using convention commits.
+- Always add an `Model-version:` footer at the bottom of commits the messages with the current model version

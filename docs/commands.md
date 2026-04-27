@@ -171,8 +171,7 @@ options:
 ```text
 usage: public-diary-tools configure-drive-access [-h]
 
-Grant the deploy service account read access to the configured Drive
-target.
+Grant the deploy service account read access to the configured Drive target.
 
 options:
   -h, --help  show this help message and exit
@@ -194,8 +193,8 @@ options:
 ```text
 usage: public-diary-tools provision-all [-h]
 
-Discover Drive values and provision Google, GitHub, Discord, and local
-act inputs.
+Discover Drive values and provision Google, GitHub, Discord, and local act
+inputs.
 
 options:
   -h, --help  show this help message and exit
