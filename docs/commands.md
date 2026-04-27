@@ -193,8 +193,7 @@ options:
 ```text
 usage: public-diary-tools provision-all [-h]
 
-Discover Drive values and provision Google, GitHub, Discord, and local act
-inputs.
+Discover Drive values and provision Google, GitHub, Discord, and local act inputs.
 
 options:
   -h, --help  show this help message and exit
