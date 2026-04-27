@@ -476,6 +476,17 @@ def test_provision_auth_writes_vars_and_uploads(monkeypatch: pytest.MonkeyPatch,
     assert read_env_file(var_file) == {"GCP_SERVICE_ACCOUNT": "svc@proj.iam.gserviceaccount.com"}
     assert ("var", "GCP_SERVICE_ACCOUNT", "svc@proj.iam.gserviceaccount.com") in calls
     assert ("create_provider", "123", "github", "public-diary", "owner/repo", "GitHub repository") in calls
+    github_principal = (
+        "principalSet://iam.googleapis.com/"
+        "projects/123/locations/global/workloadIdentityPools/github/attribute.repository/owner/repo"
+    )
+    assert (
+        "binding",
+        "proj",
+        "svc@proj.iam.gserviceaccount.com",
+        "roles/iam.serviceAccountTokenCreator",
+        github_principal,
+    ) in calls
 
 
 def test_provision_all_batches_independent_work(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -558,6 +569,17 @@ def test_provision_all_batches_independent_work(monkeypatch: pytest.MonkeyPatch,
     assert ("secret", "DISCORD_WEBHOOK_URL", "https://discord.example") in calls
     assert ("secret", "PAGES_ADMIN_TOKEN", "token") in calls
     assert ("drive", "drive-id", "svc@proj.iam.gserviceaccount.com", "reader") not in calls
+    github_principal = (
+        "principalSet://iam.googleapis.com/"
+        "projects/123/locations/global/workloadIdentityPools/github/attribute.repository/owner/repo"
+    )
+    assert (
+        "binding",
+        "proj",
+        "svc@proj.iam.gserviceaccount.com",
+        "roles/iam.serviceAccountTokenCreator",
+        github_principal,
+    ) in calls
 
 
 def test_format_duration_unknown() -> None:

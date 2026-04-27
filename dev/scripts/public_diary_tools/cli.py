@@ -341,6 +341,13 @@ def _configure_workload_identity(google: GoogleApis, project_number: str, repo: 
         )
 
 
+def _github_wif_principal(project_number: str, pool_id: str, repo: str) -> str:
+    return (
+        "principalSet://iam.googleapis.com/"
+        f"projects/{project_number}/locations/global/workloadIdentityPools/{pool_id}/attribute.repository/{repo}"
+    )
+
+
 def _provision_google_auth(google: GoogleApis, project_id: str, act_vars: ActVars, repo: str) -> None:
     service_account = act_vars.gcp_service_account
     account_id = service_account.split("@", 1)[0]
@@ -355,15 +362,19 @@ def _provision_google_auth(google: GoogleApis, project_id: str, act_vars: ActVar
 
     project_number = google.project_number(project_id)
     wif_pool_id = os.environ.get("WIF_POOL_ID", "github")
+    github_principal = _github_wif_principal(project_number, wif_pool_id, repo)
     _configure_workload_identity(google, project_number, repo)
     google.add_service_account_binding(
         project_id,
         service_account,
         "roles/iam.workloadIdentityUser",
-        (
-            "principalSet://iam.googleapis.com/"
-            f"projects/{project_number}/locations/global/workloadIdentityPools/{wif_pool_id}/attribute.repository/{repo}"
-        ),
+        github_principal,
+    )
+    google.add_service_account_binding(
+        project_id,
+        service_account,
+        "roles/iam.serviceAccountTokenCreator",
+        github_principal,
     )
     google.add_service_account_binding(
         project_id,
