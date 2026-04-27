@@ -36,6 +36,7 @@
 - `make notes-clone`
 - `make docs-readme-sync`
 - `make docs-commands`
+- `make docs-wiki-stage`
 - `make docs-generated-check`
 - `make venv`
 - `make ruff`
@@ -95,6 +96,17 @@ options:
 usage: public-diary-tools coverage-badge [-h]
 
 Generate the README test coverage badge from pytest coverage JSON.
+
+options:
+  -h, --help  show this help message and exit
+```
+
+### `stage-wiki-docs`
+
+```text
+usage: public-diary-tools stage-wiki-docs [-h]
+
+Stage docs into a checked-out GitHub wiki directory.
 
 options:
   -h, --help  show this help message and exit

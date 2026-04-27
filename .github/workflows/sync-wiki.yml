@@ -26,15 +26,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Checkout wiki
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki
+
       - name: Sync root README into docs
         run: make docs-readme-sync
 
-      - name: Publish docs to wiki
-        uses: Andrew-Chen-Wang/github-wiki-action@v5
-        with:
-          path: docs
-          preprocess: true
-          disable-empty-commits: true
+      - name: Stage docs into wiki
+        run: make docs-wiki-stage
+
+      - name: Commit wiki changes
+        working-directory: wiki
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- .; then
+            echo "Wiki already up to date."
+            exit 0
+          fi
+          git add .
+          git commit -m "docs: sync repository docs"
+          git push
 
   notify-failure:
     needs:

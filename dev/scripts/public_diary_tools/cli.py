@@ -35,6 +35,7 @@ from public_diary_tools.github_settings import (
 from public_diary_tools.json_tools import check_json_configs, format_json_configs
 from public_diary_tools.paths import act_secret_file, act_var_file, discord_webhook_file, google_drive_token_file
 from public_diary_tools.progress import track_web_request, web_request_progress
+from public_diary_tools.wiki import stage_wiki_docs
 
 REQUIRED_APIS = [
     "drive.googleapis.com",
@@ -139,6 +140,14 @@ def cmd_coverage_badge(_: argparse.Namespace | None) -> int:
             print(f"- {path}")
     else:
         print("Coverage badge files already up to date.")
+    return 0
+
+
+def cmd_stage_wiki_docs(_: argparse.Namespace | None) -> int:
+    """Stage docs into a checked-out GitHub wiki directory."""
+    wiki_dir = Path(os.environ.get("WIKI_DIR", "wiki"))
+    changed = stage_wiki_docs(Path("docs"), wiki_dir)
+    print(f"Staged {len(changed)} docs files into {wiki_dir}.")
     return 0
 
 
@@ -520,6 +529,7 @@ def _command_functions() -> dict[str, Callable[..., int]]:
         "format-json": cmd_format_json,
         "check-json": cmd_check_json,
         "coverage-badge": cmd_coverage_badge,
+        "stage-wiki-docs": cmd_stage_wiki_docs,
         "upload-github-vars": cmd_upload_github_vars,
         "write-discord-webhook": cmd_write_discord_webhook,
         "upload-github-secrets": cmd_upload_github_secrets,
