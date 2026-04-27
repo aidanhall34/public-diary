@@ -242,17 +242,21 @@ def cmd_configure_drive_access(_: argparse.Namespace | None) -> int:
     """Grant the deploy service account read access to the configured Drive target."""
     values = read_env_file(act_var_file())
     service_account = os.environ.get("SERVICE_ACCOUNT_EMAIL") or values.get("GCP_SERVICE_ACCOUNT", "")
-    target_id = (
-        os.environ.get("DRIVE_TARGET_ID")
-        or values.get("GOOGLE_DRIVE_ROOT_FOLDER_ID")
-        or values.get("GOOGLE_DRIVE_SHARED_DRIVE_ID")
-    )
+    root_folder_id = os.environ.get("DRIVE_TARGET_ID") or values.get("GOOGLE_DRIVE_ROOT_FOLDER_ID", "")
+    shared_drive_id = values.get("GOOGLE_DRIVE_SHARED_DRIVE_ID", "")
     if not service_account:
         raise RuntimeError("SERVICE_ACCOUNT_EMAIL is required or dev/act/vars.env must contain GCP_SERVICE_ACCOUNT.")
-    if not target_id:
+    if not root_folder_id and not shared_drive_id:
         raise RuntimeError("DRIVE_TARGET_ID is required or Drive IDs must exist in dev/act/vars.env.")
-    role = os.environ.get("DRIVE_PERMISSION_ROLE", "reader")
-    result = GoogleApis().grant_drive_permission(target_id, service_account, role)
+    act_vars = ActVars(
+        gcp_workload_identity_provider="",
+        gcp_service_account=service_account,
+        google_drive_root_folder_id=root_folder_id,
+        google_drive_shared_drive_id=shared_drive_id,
+        google_workspace_user="",
+        google_drive_path="",
+    )
+    result = _grant_drive_access(GoogleApis(), act_vars)
     print(json.dumps(result, indent=2))
     return 0
 
@@ -378,14 +382,21 @@ def _provision_google_auth(google: GoogleApis, project_id: str, act_vars: ActVar
 
 
 def _grant_drive_access(google: GoogleApis, act_vars: ActVars) -> dict[str, str]:
-    target_id = act_vars.google_drive_root_folder_id or act_vars.google_drive_shared_drive_id
-    if not target_id:
-        raise RuntimeError("A Google Drive shared drive or root folder ID is required.")
-    return google.grant_drive_permission(
-        target_id,
-        act_vars.gcp_service_account,
-        os.environ.get("DRIVE_PERMISSION_ROLE", "reader"),
-    )
+    if act_vars.google_drive_root_folder_id:
+        return google.grant_drive_permission(
+            act_vars.google_drive_root_folder_id,
+            act_vars.gcp_service_account,
+            os.environ.get("DRIVE_PERMISSION_ROLE", "reader"),
+        )
+    if act_vars.google_drive_shared_drive_id:
+        return {
+            "id": act_vars.google_drive_shared_drive_id,
+            "emailAddress": act_vars.gcp_service_account,
+            "role": os.environ.get("DRIVE_PERMISSION_ROLE", "reader"),
+            "status": "skipped",
+            "reason": "Shared Drive root permissions must be managed from Google Drive.",
+        }
+    raise RuntimeError("A Google Drive shared drive or root folder ID is required.")
 
 
 def cmd_provision_auth(_: argparse.Namespace | None) -> int:

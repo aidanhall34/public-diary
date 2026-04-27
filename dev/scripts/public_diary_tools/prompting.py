@@ -24,7 +24,7 @@ if readline is not None:  # pragma: no cover - depends on interactive terminal s
 
 
 def color(value: str, code: str) -> str:
-    if os.environ.get("NO_COLOR") or not sys.stdout.isatty():
+    if os.environ.get("NO_COLOR") or os.environ.get("MAKELEVEL") or not sys.stdout.isatty():
         return value
     return f"{code}{value}{RESET}"
 
