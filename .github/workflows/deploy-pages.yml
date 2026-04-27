@@ -18,6 +18,7 @@ permissions:
   actions: read
   contents: write
   pages: write
+  pull-requests: write
   id-token: write
 
 concurrency:
@@ -167,6 +168,7 @@ jobs:
           steps.vault-changes.outputs.should_publish == 'true' &&
           steps.vault-changes.outputs.vault_changed == 'true'
         env:
+          GH_TOKEN: ${{ secrets.PAGES_ADMIN_TOKEN || github.token }}
           PUSH_TOKEN: ${{ secrets.PAGES_ADMIN_TOKEN || github.token }}
         run: |
           git config user.name "github-actions[bot]"
@@ -177,7 +179,34 @@ jobs:
             exit 0
           fi
           git commit -m "chore: sync vault notes" -m "Model-version: github-actions"
-          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF_NAME}"
+
+          sync_branch="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            sync_branch="automation/sync-vault-notes"
+          fi
+
+          git fetch origin "${sync_branch}" || true
+          git push --force-with-lease \
+            "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:${sync_branch}"
+
+          if [ "${sync_branch}" != "${GITHUB_REF_NAME}" ]; then
+            pr_number="$(gh pr list \
+              --head "${sync_branch}" \
+              --base "${GITHUB_REF_NAME}" \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty')"
+            if [ -z "${pr_number}" ]; then
+              gh pr create \
+                --head "${sync_branch}" \
+                --base "${GITHUB_REF_NAME}" \
+                --title "chore: sync vault notes" \
+                --body "Automated vault sync from Google Drive."
+            else
+              echo "Vault sync pull request #${pr_number} is already open."
+            fi
+          fi
 
       - name: Upload GitHub Pages artifact
         if: >-

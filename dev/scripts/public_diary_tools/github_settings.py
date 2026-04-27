@@ -17,6 +17,10 @@ class GitHubNotFoundError(RuntimeError):
     """GitHub returned 404 for a repository settings request."""
 
 
+class GitHubConflictError(RuntimeError):
+    """GitHub returned 409 for a repository settings request."""
+
+
 class GitHubSettingsApi(Protocol):
     def default_branch(self) -> str: ...
 
@@ -68,6 +72,11 @@ class GitHubSettingsClient:
                     "administration permission. Run `gh auth refresh -s repo -s workflow` and ensure your user "
                     "can administer the repository.",
                 ) from exc
+            if response.status_code == 409:
+                raise GitHubConflictError(
+                    "GitHub returned 409 while applying repository settings. "
+                    "This usually means the requested resource already exists or is not ready for mutation.",
+                ) from exc
             raise
         try:
             return response.json()
@@ -95,7 +104,10 @@ class GitHubSettingsClient:
         try:
             self._request("PUT", "/pages", settings)
         except GitHubNotFoundError:
-            self.create_pages({"build_type": str(settings.get("build_type", "workflow"))})
+            try:
+                self.create_pages({"build_type": str(settings.get("build_type", "workflow"))})
+            except GitHubConflictError:
+                pass
             self._request("PUT", "/pages", settings)
 
     def put_branch_protection(self, branch: str, settings: dict[str, Any]) -> None:

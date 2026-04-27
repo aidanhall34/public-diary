@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 from public_diary_tools.github_settings import (
+    GitHubConflictError,
     GitHubNotFoundError,
     GitHubSettingsClient,
     apply_github_settings,
@@ -298,6 +299,33 @@ def test_github_settings_client_creates_pages_site_before_update(monkeypatch: py
         ("PUT", "/pages", {"cname": "notes.ah34.net", "https_enforced": True}),
         ("POST", "/pages", {"build_type": "workflow"}),
         ("PUT", "/pages", {"cname": "notes.ah34.net", "https_enforced": True}),
+    ]
+
+
+def test_github_settings_client_ignores_pages_create_conflict(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    client = GitHubSettingsClient(
+        repository="owner/repo",
+        token="github-token",
+        base_url="https://api.example.test",
+    )
+
+    def fake_request(method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        calls.append((method, path, payload))
+        if len(calls) == 1:
+            raise GitHubNotFoundError("missing pages site")
+        if len(calls) == 2:
+            raise GitHubConflictError("pages site already exists")
+        return {}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    client.update_pages({"build_type": "workflow", "cname": "notes.ah34.net", "https_enforced": True})
+
+    assert calls == [
+        ("PUT", "/pages", {"build_type": "workflow", "cname": "notes.ah34.net", "https_enforced": True}),
+        ("POST", "/pages", {"build_type": "workflow"}),
+        ("PUT", "/pages", {"build_type": "workflow", "cname": "notes.ah34.net", "https_enforced": True}),
     ]
 
 
