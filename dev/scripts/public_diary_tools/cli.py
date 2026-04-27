@@ -628,35 +628,10 @@ def _convert_github_app_manifest(code: str) -> dict[str, Any]:
     return cast(dict[str, Any], _github_request("POST", f"/app-manifests/{code}/conversions"))
 
 
-def _repository_id(repo: str, token: str) -> int:
-    response = cast(dict[str, Any], _github_request("GET", f"/repos/{repo}", token))
-    return int(response["id"])
-
-
-def _find_installation(app_id: int, token: str) -> dict[str, Any] | None:
-    response = cast(dict[str, Any], _github_request("GET", "/user/installations", token))
-    installations = response.get("installations", [])
-    if not isinstance(installations, list):
-        return None
-    for installation in installations:
-        if isinstance(installation, dict) and int(installation.get("app_id", 0)) == app_id:
-            return installation
-    return None
-
-
-def _ensure_github_app_installation(app_id: int, app_slug: str, repo: str, token: str) -> None:
-    installation = _find_installation(app_id, token)
-    if installation is None:
-        print(f"Install the GitHub App for the repository owner: https://github.com/apps/{app_slug}/installations/new")
-        input("Press Enter after installing the app: ")
-        installation = _find_installation(app_id, token)
-    if installation is None:
-        raise RuntimeError(f"GitHub App installation was not found for {app_slug}.")
-    if installation.get("repository_selection") == "all":
-        return
-    installation_id = int(installation["id"])
-    repo_id = _repository_id(repo, token)
-    _github_request("PUT", f"/user/installations/{installation_id}/repositories/{repo_id}", token)
+def _prompt_github_app_installation(app_slug: str, repo: str) -> None:
+    print(f"Install the GitHub App for {repo}: https://github.com/apps/{app_slug}/installations/new")
+    print("If GitHub asks for repository access, select this repository or all repositories.")
+    input("Press Enter after installing the app: ")
 
 
 def _provision_github_app(repo: str, token: str) -> str:
@@ -664,9 +639,8 @@ def _provision_github_app(repo: str, token: str) -> str:
     app = _convert_github_app_manifest(_wait_for_manifest_code(manifest))
     client_id = str(app["client_id"])
     private_key = str(app["pem"])
-    app_id = int(app["id"])
     app_slug = str(app["slug"])
-    _ensure_github_app_installation(app_id, app_slug, repo, token)
+    _prompt_github_app_installation(app_slug, repo)
     _write_github_app_file(client_id, private_key)
     asyncio.run(_upload_github_secrets(_github_app_values(required=True), repo, token))
     return app_slug

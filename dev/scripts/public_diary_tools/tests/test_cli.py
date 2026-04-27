@@ -540,8 +540,6 @@ def test_provision_github_app_writes_and_uploads_credentials(monkeypatch: pytest
                 "client_id": "client-id",
                 "pem": "-----BEGIN KEY-----\nprivate\n-----END KEY-----\n",
             }
-        if path == "/user/installations":
-            return {"installations": [{"id": 456, "app_id": 123, "repository_selection": "all"}]}
         raise AssertionError((method, path, token, payload))
 
     monkeypatch.setenv("GITHUB_APP_FILE", str(app_file))
@@ -549,6 +547,11 @@ def test_provision_github_app_writes_and_uploads_credentials(monkeypatch: pytest
     monkeypatch.setattr(cli, "github_token_from_gh", lambda: "token")
     monkeypatch.setattr(cli, "GithubClient", FakeGithub)
     monkeypatch.setattr(cli, "_wait_for_manifest_code", lambda _manifest: "manifest-code")
+    monkeypatch.setattr(
+        cli,
+        "_prompt_github_app_installation",
+        lambda app_slug, repo: calls.append(("install", app_slug, repo)),
+    )
     monkeypatch.setattr(cli, "_github_request", fake_request)
 
     assert cli.cmd_provision_github_app(None) == 0
@@ -557,29 +560,24 @@ def test_provision_github_app_writes_and_uploads_credentials(monkeypatch: pytest
         "GITHUB_APP_CLIENT_ID": "client-id",
         "GITHUB_APP_PRIVATE_KEY": "-----BEGIN KEY-----\\nprivate\\n-----END KEY-----",
     }
+    assert ("install", "public-diary-automation", "owner/repo") in calls
     assert ("secret", "GITHUB_APP_CLIENT_ID", "client-id") in calls
     assert ("secret", "GITHUB_APP_PRIVATE_KEY", "-----BEGIN KEY-----\\nprivate\\n-----END KEY-----") in calls
 
 
-def test_ensure_github_app_installation_adds_selected_repository(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, str, str | None]] = []
+def test_prompt_github_app_installation_waits_for_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    prompts: list[str] = []
+    monkeypatch.setattr("builtins.input", lambda prompt: prompts.append(prompt))
 
-    def fake_request(method: str, path: str, token: str | None = None, payload: dict[str, Any] | None = None) -> Any:
-        assert payload is None
-        calls.append((method, path, token))
-        if path == "/user/installations":
-            return {"installations": [{"id": 456, "app_id": 123, "repository_selection": "selected"}]}
-        if path == "/repos/owner/repo":
-            return {"id": 789}
-        if path == "/user/installations/456/repositories/789":
-            return {}
-        raise AssertionError((method, path, token))
+    cli._prompt_github_app_installation("public-diary-automation", "owner/repo")  # noqa: SLF001
 
-    monkeypatch.setattr(cli, "_github_request", fake_request)
-
-    cli._ensure_github_app_installation(123, "public-diary-automation", "owner/repo", "token")  # noqa: SLF001
-
-    assert calls[-1] == ("PUT", "/user/installations/456/repositories/789", "token")
+    output = capsys.readouterr().out
+    assert "https://github.com/apps/public-diary-automation/installations/new" in output
+    assert "owner/repo" in output
+    assert prompts == ["Press Enter after installing the app: "]
 
 
 def test_github_request_and_manifest_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -867,26 +865,6 @@ def test_wait_for_manifest_code_requires_value(monkeypatch: pytest.MonkeyPatch) 
 
     with pytest.raises(RuntimeError, match="manifest code"):
         cli._wait_for_manifest_code({}, lambda _prompt: "")  # noqa: SLF001
-
-
-def test_find_installation_handles_unexpected_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli, "_github_request", lambda *_args: {"installations": {}})
-
-    assert cli._find_installation(123, "token") is None  # noqa: SLF001
-
-
-def test_find_installation_returns_none_for_no_match(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli, "_github_request", lambda *_args: {"installations": [{"app_id": 999}]})
-
-    assert cli._find_installation(123, "token") is None  # noqa: SLF001
-
-
-def test_ensure_github_app_installation_errors_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli, "_find_installation", lambda _app_id, _token: None)
-    monkeypatch.setattr("builtins.input", lambda _prompt: "")
-
-    with pytest.raises(RuntimeError, match="was not found"):
-        cli._ensure_github_app_installation(123, "app-slug", "owner/repo", "token")  # noqa: SLF001
 
 
 def test_provision_all_batches_independent_work(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
