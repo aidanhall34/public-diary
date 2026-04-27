@@ -339,7 +339,7 @@ def test_configure_drive_access(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         var_file,
         {
             "GCP_SERVICE_ACCOUNT": "svc@proj.iam.gserviceaccount.com",
-            "GOOGLE_DRIVE_SHARED_DRIVE_ID": "drive-id",
+            "GOOGLE_DRIVE_ROOT_FOLDER_ID": "folder-id",
         },
     )
 
@@ -350,6 +350,34 @@ def test_configure_drive_access(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     monkeypatch.setenv("ACT_VAR_FILE", str(var_file))
     monkeypatch.setattr(cli, "GoogleApis", FakeGoogle)
     assert cli.cmd_configure_drive_access(None) == 0
+
+
+def test_configure_drive_access_skips_shared_drive_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    var_file = tmp_path / "vars.env"
+    write_env_file(
+        var_file,
+        {
+            "GCP_SERVICE_ACCOUNT": "svc@proj.iam.gserviceaccount.com",
+            "GOOGLE_DRIVE_SHARED_DRIVE_ID": "drive-id",
+        },
+    )
+
+    class FakeGoogle:
+        def grant_drive_permission(self, target_id: str, email: str, role: str) -> dict[str, str]:
+            raise AssertionError((target_id, email, role))
+
+    monkeypatch.setenv("ACT_VAR_FILE", str(var_file))
+    monkeypatch.setattr(cli, "GoogleApis", FakeGoogle)
+
+    assert cli.cmd_configure_drive_access(None) == 0
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["id"] == "drive-id"
+    assert output["status"] == "skipped"
 
 
 def test_configure_drive_access_requires_values(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -529,7 +557,7 @@ def test_provision_all_batches_independent_work(monkeypatch: pytest.MonkeyPatch,
     assert read_env_file(secret_file)["PAGES_ADMIN_TOKEN"] == "token"
     assert ("secret", "DISCORD_WEBHOOK_URL", "https://discord.example") in calls
     assert ("secret", "PAGES_ADMIN_TOKEN", "token") in calls
-    assert ("drive", "drive-id", "svc@proj.iam.gserviceaccount.com", "reader") in calls
+    assert ("drive", "drive-id", "svc@proj.iam.gserviceaccount.com", "reader") not in calls
 
 
 def test_format_duration_unknown() -> None:
@@ -604,9 +632,13 @@ def test_main_returns_clean_exit_for_eof(monkeypatch: pytest.MonkeyPatch) -> Non
     assert cli.main(["write-act-files"]) == 130
 
 
-def test_main_success(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    webhook_file = tmp_path / "webhook"
+    monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(webhook_file))
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.example")
+
     assert cli.main(["write-discord-webhook"]) == 0
+    assert webhook_file.read_text() == "https://discord.example\n"
 
 
 def test_main_writes_json_debug_log(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

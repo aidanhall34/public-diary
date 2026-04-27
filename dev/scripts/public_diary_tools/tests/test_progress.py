@@ -1,0 +1,24 @@
+from __future__ import annotations
+
+from io import StringIO
+
+from public_diary_tools.progress import add_web_requests, track_web_request, web_request_progress
+
+
+def test_web_request_progress_tracks_dynamic_totals() -> None:
+    output = StringIO()
+
+    with web_request_progress(output):
+        add_web_requests(10)
+        for _ in range(5):
+            with track_web_request(planned=False):
+                pass
+        add_web_requests(10)
+
+    assert "Web requests completed/initiated/total: 5/5/20 (25%)" in output.getvalue()
+    assert output.getvalue().endswith("\n")
+
+
+def test_track_web_request_without_active_progress_is_noop() -> None:
+    with track_web_request():
+        pass

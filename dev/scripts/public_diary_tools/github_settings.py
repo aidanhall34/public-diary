@@ -8,6 +8,8 @@ from typing import Any, Protocol, cast
 import requests
 from requests import HTTPError
 
+from public_diary_tools.progress import track_web_request
+
 DEFAULT_SETTINGS_FILE = Path(".github/config/repository-permissions.json")
 
 
@@ -36,17 +38,18 @@ class GitHubSettingsClient:
     base_url: str = "https://api.github.com"
 
     def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
-        response = requests.request(
-            method,
-            f"{self.base_url}/repos/{self.repository}{path}",
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {self.token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-            json=payload,
-            timeout=30,
-        )
+        with track_web_request():
+            response = requests.request(
+                method,
+                f"{self.base_url}/repos/{self.repository}{path}",
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "Authorization": f"Bearer {self.token}",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                json=payload,
+                timeout=30,
+            )
         try:
             response.raise_for_status()
         except HTTPError as exc:

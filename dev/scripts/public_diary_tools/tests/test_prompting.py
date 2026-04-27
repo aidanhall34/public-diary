@@ -1,10 +1,17 @@
 import pytest
-from public_diary_tools.prompting import prompt_required_value, prompt_value, prompt_yes_no, select_option
+from public_diary_tools.prompting import color, prompt_required_value, prompt_value, prompt_yes_no, select_option
 
 
 def test_prompt_value_uses_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NO_COLOR", "1")
     assert prompt_value("NAME", "default", input_fn=lambda _: "") == "default"
+
+
+def test_color_is_disabled_under_make(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("MAKELEVEL", "1")
+
+    assert color("NAME", "\033[1m") == "NAME"
 
 
 def test_prompt_value_accepts_input(monkeypatch: pytest.MonkeyPatch) -> None:
