@@ -24,3 +24,4 @@ A repo to manage deployment of my obsidian notes to github pages.
 - `Commit` changes to the repo using `convention commits`.
 - `Always` add an `Model-version:` footer at the bottom of `commits` the messages with the current model version
 - `Always` `git push` after `commits`
+- `Never` commit directly to the main branch. Check your target branch before committing with `git branch --show-current`.
