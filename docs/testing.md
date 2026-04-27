@@ -29,7 +29,7 @@ The test target writes local `act` input files and runs two dry runs:
 
 - Python unit tests through pytest with at least 95% coverage
 - Makefile linting through checkmake
-- `deploy-pages.yml` build job with local Drive variables and a `GITHUB_TOKEN` from `gh auth token`
+- `deploy-pages.yml` build job with local Drive variables and GitHub App credentials from local `act` secrets
 - `sync-wiki.yml` publish job
 
 `make ruff` lints Python tooling and colocated tests under `dev/scripts/public_diary_tools`.
@@ -47,8 +47,8 @@ make python-tool ARGS="write-discord-webhook"
 make test
 ```
 
-`make test` writes `PAGES_ADMIN_TOKEN` from `gh auth token`, reads `dev/act/discord-webhook-url` when present, and
-writes the generated `dev/act/secrets.env` file. The local secret files are ignored by git.
+`make test` reads GitHub App credentials from `dev/act/github-app.env`, reads `dev/act/discord-webhook-url` when
+present, and writes the generated `dev/act/secrets.env` file. The local secret files are ignored by git.
 
 ## Notes
 

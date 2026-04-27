@@ -23,3 +23,6 @@ def discord_webhook_file() -> Path:
 def google_drive_token_file() -> Path:
     return Path(os.environ.get("GOOGLE_DRIVE_TOKEN_FILE", act_dir() / "google-drive-access-token"))
 
+
+def github_app_file() -> Path:
+    return Path(os.environ.get("GITHUB_APP_FILE", act_dir() / "github-app.env"))

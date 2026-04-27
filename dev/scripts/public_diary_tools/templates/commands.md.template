@@ -95,10 +95,12 @@ GitHub repository variables written by the tooling:
 - `GOOGLE_WORKSPACE_DELEGATION_ENABLED`
 - `GOOGLE_WORKSPACE_USER`
 
-GitHub Pages first-run enablement uses the `PAGES_ADMIN_TOKEN` repository secret, which is uploaded from
-`gh auth token` by `make python-tool ARGS="upload-github-secrets"`. Discord failure notifications use the optional
+GitHub workflow authentication uses a GitHub App installation token minted by `actions/create-github-app-token`.
+Create and install the app with `make python-tool ARGS="provision-github-app"`. The tool uploads
+`GITHUB_APP_CLIENT_ID` and `GITHUB_APP_PRIVATE_KEY` to repository secrets and writes a local ignored
+`dev/act/github-app.env` source file for `act`. Discord failure notifications use the optional
 `DISCORD_WEBHOOK_URL` repository secret. Write the local Discord file with
-`make python-tool ARGS="write-discord-webhook"`, then upload both secrets with
+`make python-tool ARGS="write-discord-webhook"`, then upload secrets with
 `make python-tool ARGS="upload-github-secrets"`. GitHub secrets are write-only through `gh`, so the tooling uploads
 values but cannot read them back later.
 
@@ -111,8 +113,9 @@ make python-tool ARGS="write-act-files"
 ```
 
 This writes `dev/act/vars.env`, `dev/act/secrets.env`, and `dev/act/google-drive-access-token`. These files are
-intentionally ignored by git. The secrets file includes short-lived `GITHUB_TOKEN` and `PAGES_ADMIN_TOKEN` values from
-`gh auth token`, and includes `DISCORD_WEBHOOK_URL` and `GOOGLE_DRIVE_ACCESS_TOKEN` when their local files exist.
+intentionally ignored by git. The secrets file includes `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_PRIVATE_KEY` from
+`dev/act/github-app.env` or the matching environment variables, and includes `DISCORD_WEBHOOK_URL` and
+`GOOGLE_DRIVE_ACCESS_TOKEN` when their local files exist.
 
 `make python-tool ARGS="write-act-vars"` discovers the current `gcloud` project, lists accessible projects with a custom
 option when needed, prompts for missing values, ignores stale dummy values, and can list visible Shared Drives after

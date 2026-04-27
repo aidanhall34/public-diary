@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import os
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Self, cast
@@ -24,13 +25,14 @@ def test_write_act_files_uses_local_secret_files(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("ACT_SECRET_FILE", str(secret_file))
     monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(webhook_file))
     monkeypatch.setenv("GOOGLE_DRIVE_TOKEN_FILE", str(token_file))
-    monkeypatch.setattr(cli, "github_token_from_gh", lambda: "github-token")
+    monkeypatch.setenv("GITHUB_APP_CLIENT_ID", "client-id")
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "private-key")
 
     assert cli.cmd_write_act_files(None) == 0
 
     assert read_env_file(secret_file) == {
-        "GITHUB_TOKEN": "github-token",
-        "PAGES_ADMIN_TOKEN": "github-token",
+        "GITHUB_APP_CLIENT_ID": "client-id",
+        "GITHUB_APP_PRIVATE_KEY": "private-key",
         "DISCORD_WEBHOOK_URL": "https://discord.example",
         "GOOGLE_DRIVE_ACCESS_TOKEN": "drive-token",
     }
@@ -111,6 +113,21 @@ def test_coverage_badge_prints_no_changes(monkeypatch: pytest.MonkeyPatch, capsy
     assert "already up to date" in capsys.readouterr().out
 
 
+def test_stage_wiki_docs_uses_env_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    wiki_dir = tmp_path / "wiki"
+    calls: list[tuple[Path, Path]] = []
+
+    def fake_stage(source: Path, target: Path) -> list[Path]:
+        calls.append((source, target))
+        return [target / "Home.md"]
+
+    monkeypatch.setenv("WIKI_DIR", str(wiki_dir))
+    monkeypatch.setattr(cli, "stage_wiki_docs", fake_stage)
+
+    assert cli.cmd_stage_wiki_docs(None) == 0
+    assert calls == [(Path("docs"), wiki_dir)]
+
+
 def test_write_discord_webhook_prompts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     path = tmp_path / "webhook"
     monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(path))
@@ -141,6 +158,26 @@ def test_prompt_discord_webhook_reads_existing_file(monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
 
     assert cli._prompt_discord_webhook() == "https://discord.example"  # noqa: SLF001
+
+
+def test_discord_webhook_value_sources(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    path = tmp_path / "webhook"
+    path.write_text("https://discord-file.example\n")
+    monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(path))
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
+
+    assert cli._discord_webhook_value() == "https://discord-file.example"  # noqa: SLF001
+
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord-env.example")
+    assert cli._discord_webhook_value() == "https://discord-env.example"  # noqa: SLF001
+
+
+def test_discord_webhook_value_requires_value(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(tmp_path / "missing"))
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
+
+    with pytest.raises(RuntimeError, match="DISCORD_WEBHOOK_URL"):
+        cli._discord_webhook_value()  # noqa: SLF001
 
 
 def test_upload_github_vars(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -176,7 +213,9 @@ def test_upload_github_vars_requires_file(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 def test_upload_github_secrets_reads_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     path = tmp_path / "webhook"
+    app_file = tmp_path / "github-app.env"
     path.write_text("https://discord.example\n")
+    write_env_file(app_file, {"GITHUB_APP_CLIENT_ID": "client-id", "GITHUB_APP_PRIVATE_KEY": "private-key"})
     calls: list[tuple[Any, ...]] = []
 
     class FakeGithub:
@@ -187,6 +226,7 @@ def test_upload_github_secrets_reads_file(monkeypatch: pytest.MonkeyPatch, tmp_p
             calls.append((name, value))
 
     monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(path))
+    monkeypatch.setenv("GITHUB_APP_FILE", str(app_file))
     monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
     monkeypatch.setattr(cli, "GithubClient", FakeGithub)
     monkeypatch.setattr(cli, "repository_from_gh", lambda: "owner/repo")
@@ -196,31 +236,21 @@ def test_upload_github_secrets_reads_file(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert calls[0] == ("init", "owner/repo", "token")
     assert sorted(calls[1:]) == [
         ("DISCORD_WEBHOOK_URL", "https://discord.example"),
-        ("PAGES_ADMIN_TOKEN", "token"),
+        ("GITHUB_APP_CLIENT_ID", "client-id"),
+        ("GITHUB_APP_PRIVATE_KEY", "private-key"),
     ]
 
 
-def test_upload_github_secrets_uploads_pages_token_without_webhook(
+def test_upload_github_secrets_requires_github_app(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    calls: list[tuple[Any, ...]] = []
-
-    class FakeGithub:
-        def __init__(self, repo: str, token: str) -> None:
-            calls.append(("init", repo, token))
-
-        def set_secret(self, name: str, value: str) -> None:
-            calls.append((name, value))
-
+    monkeypatch.setenv("GITHUB_APP_FILE", str(tmp_path / "missing"))
     monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(tmp_path / "missing"))
     monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
-    monkeypatch.setattr(cli, "GithubClient", FakeGithub)
-    monkeypatch.setattr(cli, "repository_from_gh", lambda: "owner/repo")
-    monkeypatch.setattr(cli, "github_token_from_gh", lambda: "token")
 
-    assert cli.cmd_upload_github_secrets(None) == 0
-    assert calls == [("init", "owner/repo", "token"), ("PAGES_ADMIN_TOKEN", "token")]
+    with pytest.raises(RuntimeError, match="GitHub App credentials"):
+        cli.cmd_upload_github_secrets(None)
 
 
 def test_apply_github_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -489,6 +519,291 @@ def test_provision_auth_writes_vars_and_uploads(monkeypatch: pytest.MonkeyPatch,
     ) in calls
 
 
+def test_provision_github_app_writes_and_uploads_credentials(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    app_file = tmp_path / "github-app.env"
+    calls: list[tuple[Any, ...]] = []
+
+    class FakeGithub:
+        def __init__(self, repo: str, token: str) -> None:
+            calls.append(("github", repo, token))
+
+        def set_secret(self, name: str, value: str) -> None:
+            calls.append(("secret", name, value))
+
+    def fake_request(method: str, path: str, token: str | None = None, payload: dict[str, Any] | None = None) -> Any:
+        calls.append(("request", method, path, token, payload))
+        if path == "/app-manifests/manifest-code/conversions":
+            return {
+                "id": 123,
+                "slug": "public-diary-automation",
+                "client_id": "client-id",
+                "pem": "-----BEGIN KEY-----\nprivate\n-----END KEY-----\n",
+            }
+        if path == "/user/installations":
+            return {"installations": [{"id": 456, "app_id": 123, "repository_selection": "all"}]}
+        raise AssertionError((method, path, token, payload))
+
+    monkeypatch.setenv("GITHUB_APP_FILE", str(app_file))
+    monkeypatch.setattr(cli, "select_repository", lambda: "owner/repo")
+    monkeypatch.setattr(cli, "github_token_from_gh", lambda: "token")
+    monkeypatch.setattr(cli, "GithubClient", FakeGithub)
+    monkeypatch.setattr(cli, "_wait_for_manifest_code", lambda _manifest: "manifest-code")
+    monkeypatch.setattr(cli, "_github_request", fake_request)
+
+    assert cli.cmd_provision_github_app(None) == 0
+
+    assert read_env_file(app_file) == {
+        "GITHUB_APP_CLIENT_ID": "client-id",
+        "GITHUB_APP_PRIVATE_KEY": "-----BEGIN KEY-----\\nprivate\\n-----END KEY-----",
+    }
+    assert ("secret", "GITHUB_APP_CLIENT_ID", "client-id") in calls
+    assert ("secret", "GITHUB_APP_PRIVATE_KEY", "-----BEGIN KEY-----\\nprivate\\n-----END KEY-----") in calls
+
+
+def test_ensure_github_app_installation_adds_selected_repository(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str, str | None]] = []
+
+    def fake_request(method: str, path: str, token: str | None = None, payload: dict[str, Any] | None = None) -> Any:
+        assert payload is None
+        calls.append((method, path, token))
+        if path == "/user/installations":
+            return {"installations": [{"id": 456, "app_id": 123, "repository_selection": "selected"}]}
+        if path == "/repos/owner/repo":
+            return {"id": 789}
+        if path == "/user/installations/456/repositories/789":
+            return {}
+        raise AssertionError((method, path, token))
+
+    monkeypatch.setattr(cli, "_github_request", fake_request)
+
+    cli._ensure_github_app_installation(123, "public-diary-automation", "owner/repo", "token")  # noqa: SLF001
+
+    assert calls[-1] == ("PUT", "/user/installations/456/repositories/789", "token")
+
+
+def test_github_request_and_manifest_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str, dict[str, str], dict[str, Any] | None, int]] = []
+
+    class JsonResponse:
+        def raise_for_status(self) -> None:
+            calls.append(("raise", "", {}, None, 0))
+
+        def json(self) -> dict[str, str]:
+            return {"ok": "true"}
+
+    def fake_request(
+        method: str,
+        url: str,
+        headers: dict[str, str],
+        json: dict[str, Any] | None,  # noqa: A002
+        timeout: int,
+    ) -> JsonResponse:
+        calls.append((method, url, headers, json, timeout))
+        return JsonResponse()
+
+    monkeypatch.setenv("GITHUB_APP_NAME", "Custom App")
+    monkeypatch.setattr("public_diary_tools.cli.requests.request", fake_request)
+
+    assert cli._github_headers()["Accept"] == "application/vnd.github+json"  # noqa: SLF001
+    assert cli._github_headers("token")["Authorization"] == "Bearer token"  # noqa: SLF001
+    assert cli._github_request("POST", "/path", "token", {"a": 1}) == {"ok": "true"}  # noqa: SLF001
+    manifest = cli._github_app_manifest("owner/repo", "http://callback")  # noqa: SLF001
+
+    assert manifest["name"] == "Custom App"
+    assert manifest["default_permissions"]["contents"] == "write"
+    assert calls[0][1] == "https://api.github.com/path"
+
+
+def test_github_request_handles_empty_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    class EmptyResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, str]:
+            raise ValueError
+
+    monkeypatch.setattr("public_diary_tools.cli.requests.request", lambda *_args, **_kwargs: EmptyResponse())
+
+    assert cli._github_request("DELETE", "/path") == {}  # noqa: SLF001
+
+
+def test_wait_for_manifest_code_accepts_pasted_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[str] = []
+
+    class FakeServer:
+        code = ""
+        server_port = 8765
+
+        def __init__(self, address: tuple[str, int], handler: Any) -> None:
+            events.append(f"server:{address[0]}:{address[1]}:{handler.__name__}")
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            events.append("exit")
+
+        def serve_forever(self) -> None:
+            events.append("serve")
+
+        def shutdown(self) -> None:
+            events.append("shutdown")
+
+    class FakeThread:
+        def __init__(self, target: Callable[[], None], daemon: bool) -> None:
+            self.target = target
+            self.daemon = daemon
+
+        def start(self) -> None:
+            assert self.daemon is True
+            self.target()
+
+        def join(self, timeout: int) -> None:
+            events.append(f"join:{timeout}")
+
+    monkeypatch.setenv("GITHUB_APP_OWNER", "owner")
+    monkeypatch.setattr(cli, "_ManifestCallbackServer", FakeServer)
+    monkeypatch.setattr("public_diary_tools.cli.threading.Thread", FakeThread)
+
+    code = cli._wait_for_manifest_code(  # noqa: SLF001
+        {"name": "app"},
+        lambda _prompt: "http://127.0.0.1:8765/github-app-manifest-callback?code=abc",
+    )
+
+    assert code == "abc"
+    assert "serve" in events
+    assert "shutdown" in events
+
+
+def test_wait_for_manifest_code_uses_server_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeServer:
+        code = "server-code"
+        server_port = 8765
+
+        def __init__(self, _address: tuple[str, int], _handler: object) -> None:
+            return None
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def serve_forever(self) -> None:
+            return None
+
+        def shutdown(self) -> None:
+            return None
+
+    class FakeThread:
+        def __init__(self, target: Callable[[], None], daemon: bool) -> None:
+            self.target = target
+
+        def start(self) -> None:
+            self.target()
+
+        def join(self, timeout: int) -> None:
+            return None
+
+    monkeypatch.setattr(cli, "_ManifestCallbackServer", FakeServer)
+    monkeypatch.setattr("public_diary_tools.cli.threading.Thread", FakeThread)
+
+    assert cli._wait_for_manifest_code({}, lambda _prompt: "") == "server-code"  # noqa: SLF001
+
+
+def test_wait_for_manifest_code_accepts_pasted_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeServer:
+        code = ""
+        server_port = 8765
+
+        def __init__(self, _address: tuple[str, int], _handler: object) -> None:
+            return None
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def serve_forever(self) -> None:
+            return None
+
+        def shutdown(self) -> None:
+            return None
+
+    class FakeThread:
+        def __init__(self, target: Callable[[], None], daemon: bool) -> None:
+            self.target = target
+
+        def start(self) -> None:
+            self.target()
+
+        def join(self, timeout: int) -> None:
+            return None
+
+    monkeypatch.setattr(cli, "_ManifestCallbackServer", FakeServer)
+    monkeypatch.setattr("public_diary_tools.cli.threading.Thread", FakeThread)
+
+    assert cli._wait_for_manifest_code({}, lambda _prompt: "pasted-code") == "pasted-code"  # noqa: SLF001
+
+
+def test_wait_for_manifest_code_requires_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeServer:
+        code = ""
+        server_port = 8765
+
+        def __init__(self, _address: tuple[str, int], _handler: object) -> None:
+            return None
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def serve_forever(self) -> None:
+            return None
+
+        def shutdown(self) -> None:
+            return None
+
+    class FakeThread:
+        def __init__(self, target: Callable[[], None], daemon: bool) -> None:
+            self.target = target
+
+        def start(self) -> None:
+            self.target()
+
+        def join(self, timeout: int) -> None:
+            return None
+
+    monkeypatch.setattr(cli, "_ManifestCallbackServer", FakeServer)
+    monkeypatch.setattr("public_diary_tools.cli.threading.Thread", FakeThread)
+
+    with pytest.raises(RuntimeError, match="manifest code"):
+        cli._wait_for_manifest_code({}, lambda _prompt: "")  # noqa: SLF001
+
+
+def test_find_installation_handles_unexpected_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "_github_request", lambda *_args: {"installations": {}})
+
+    assert cli._find_installation(123, "token") is None  # noqa: SLF001
+
+
+def test_find_installation_returns_none_for_no_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "_github_request", lambda *_args: {"installations": [{"app_id": 999}]})
+
+    assert cli._find_installation(123, "token") is None  # noqa: SLF001
+
+
+def test_ensure_github_app_installation_errors_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "_find_installation", lambda _app_id, _token: None)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "")
+
+    with pytest.raises(RuntimeError, match="was not found"):
+        cli._ensure_github_app_installation(123, "app-slug", "owner/repo", "token")  # noqa: SLF001
+
+
 def test_provision_all_batches_independent_work(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     var_file = tmp_path / "vars.env"
     secret_file = tmp_path / "secrets.env"
@@ -551,6 +866,8 @@ def test_provision_all_batches_independent_work(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(webhook_file))
     monkeypatch.setenv("GOOGLE_DRIVE_TOKEN_FILE", str(token_file))
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.example")
+    monkeypatch.setenv("GITHUB_APP_CLIENT_ID", "client-id")
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "private-key")
     monkeypatch.setattr(cli, "GoogleApis", FakeGoogle)
     monkeypatch.setattr(cli, "select_project", lambda _google: "proj")
     monkeypatch.setattr(cli, "build_act_vars", lambda _google: FakeVars())
@@ -565,9 +882,11 @@ def test_provision_all_batches_independent_work(monkeypatch: pytest.MonkeyPatch,
 
     assert read_env_file(var_file)["GCP_SERVICE_ACCOUNT"] == "svc@proj.iam.gserviceaccount.com"
     assert read_env_file(secret_file)["DISCORD_WEBHOOK_URL"] == "https://discord.example"
-    assert read_env_file(secret_file)["PAGES_ADMIN_TOKEN"] == "token"
+    assert read_env_file(secret_file)["GITHUB_APP_CLIENT_ID"] == "client-id"
+    assert read_env_file(secret_file)["GITHUB_APP_PRIVATE_KEY"] == "private-key"
     assert ("secret", "DISCORD_WEBHOOK_URL", "https://discord.example") in calls
-    assert ("secret", "PAGES_ADMIN_TOKEN", "token") in calls
+    assert ("secret", "GITHUB_APP_CLIENT_ID", "client-id") in calls
+    assert ("secret", "GITHUB_APP_PRIVATE_KEY", "private-key") in calls
     assert ("drive", "drive-id", "svc@proj.iam.gserviceaccount.com", "reader") not in calls
     github_principal = (
         "principalSet://iam.googleapis.com/"

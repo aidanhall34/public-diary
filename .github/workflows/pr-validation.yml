@@ -19,8 +19,19 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.GITHUB_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: read
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -49,8 +60,19 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.GITHUB_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: read
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
@@ -77,8 +99,19 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.GITHUB_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: read
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -111,8 +144,19 @@ jobs:
       contains(needs.*.result, 'cancelled')) }}
     runs-on: ubuntu-latest
     steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.GITHUB_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: read
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
@@ -122,7 +166,7 @@ jobs:
       - name: Notify Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           DISCORD_JOB_RESULTS: >-
             lint=${{ needs.lint.result }}, test=${{ needs.test.result }},
             pre-commit=${{ needs.pre-commit.result }}

@@ -172,10 +172,31 @@ The preferred Google Drive layout is a Shared Drive with the deploy service acco
 in a user's My Drive, configure Google Workspace domain-wide delegation separately, set
 `GOOGLE_WORKSPACE_DELEGATION_ENABLED=true`, and set `GOOGLE_WORKSPACE_USER`.
 
+## GitHub App Authentication
+
+The batch command creates the GitHub App when no local app credentials exist. To run only that step:
+
+```sh
+make python-tool ARGS="provision-github-app"
+```
+
+The command prints a GitHub App manifest URL, runs a local callback listener, converts the returned manifest code into
+an app private key, prompts you to install the app, adds this repository to the installation when the installation uses
+selected repositories, uploads `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_PRIVATE_KEY` to repository secrets, and writes
+`dev/act/github-app.env` for local `act` runs.
+
+The GitHub App needs these repository permissions:
+
+- Actions: read
+- Contents: write
+- Metadata: read
+- Pages: write
+- Pull requests: write
+
 ## GitHub Secrets
 
-The batch command handles GitHub secret setup. To run only the secret steps, create the optional local Discord webhook
-file and upload secrets. The tool always uploads `PAGES_ADMIN_TOKEN` from `gh auth token`, and uploads
+To run only the remaining secret steps, create the optional local Discord webhook file and upload secrets. The tool
+uploads the GitHub App credentials from `dev/act/github-app.env` or matching environment variables, and uploads
 `DISCORD_WEBHOOK_URL` when the webhook is configured:
 
 ```sh
@@ -202,6 +223,7 @@ This writes ignored local files under `dev/act/`:
 - `secrets.env`
 - `google-drive-access-token`
 - `discord-webhook-url`
+- `github-app.env`
 
 ## Validate Locally
 

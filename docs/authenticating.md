@@ -115,6 +115,7 @@ Drive as the destination.
 - Do not store a Google service account key JSON in GitHub unless you have no alternative.
 - If a future build exceeds the one-hour token lifetime, split the workflow or redesign the sync so it completes within
   the token lifetime.
-- GitHub Pages first-run enablement uses `PAGES_ADMIN_TOKEN`, uploaded from `gh auth token` by the provisioning tooling.
+- GitHub repository operations use short-lived GitHub App installation tokens minted by
+  `actions/create-github-app-token`.
 - Discord notifications use only the optional `DISCORD_WEBHOOK_URL` GitHub secret and run after workflow job failure or
   cancellation.
