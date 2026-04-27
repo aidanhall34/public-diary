@@ -9,11 +9,35 @@ integration test account, not normal repository tests.
 
 from typing import Any
 
-from public_diary_tools.clients import GithubClient
+import pytest
+from public_diary_tools.clients import GithubClient, github_token_from_gh
 
 
 def test_external_client_coverage_exception_is_documented() -> None:
     assert True
+
+
+def test_github_token_from_gh_prefers_env_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GH_TOKEN", "env-token")
+    monkeypatch.setattr("public_diary_tools.clients.subprocess.check_output", lambda *_args, **_kwargs: "gh-token\n")
+
+    assert github_token_from_gh() == "env-token"
+
+
+def test_github_token_from_gh_uses_github_token_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.setenv("GITHUB_TOKEN", "github-env-token")
+    monkeypatch.setattr("public_diary_tools.clients.subprocess.check_output", lambda *_args, **_kwargs: "gh-token\n")
+
+    assert github_token_from_gh() == "github-env-token"
+
+
+def test_github_token_from_gh_falls_back_to_gh(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr("public_diary_tools.clients.subprocess.check_output", lambda *_args, **_kwargs: "gh-token\n")
+
+    assert github_token_from_gh() == "gh-token"
 
 
 def test_github_client_deletes_empty_variable() -> None:

@@ -7,10 +7,12 @@ import pytest
 from public_diary_tools.github_settings import (
     GitHubConflictError,
     GitHubNotFoundError,
+    GitHubPagesCertificatePendingError,
     GitHubSettingsClient,
     apply_github_settings,
     load_github_settings,
 )
+from requests import HTTPError
 
 
 class FakeGitHub:
@@ -277,6 +279,46 @@ def test_github_settings_client_requests(monkeypatch: pytest.MonkeyPatch) -> Non
     ]
 
 
+def test_github_settings_client_reports_failed_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        status_code = 404
+        text = '{"message":"Not Found"}'
+
+        def raise_for_status(self) -> None:
+            raise HTTPError("not found")
+
+        def json(self) -> dict[str, str]:
+            return {"message": "Not Found"}
+
+    def fake_request(
+        method: str,
+        url: str,
+        headers: dict[str, str],
+        json: dict[str, Any] | None,
+        timeout: int,
+    ) -> FakeResponse:
+        assert method == "PUT"
+        assert url == "https://api.example.test/repos/owner/repo/branches/main/protection"
+        assert headers["Authorization"] == "Bearer github-token"
+        assert json == {"enforce_admins": True}
+        assert timeout == 30
+        return FakeResponse()
+
+    monkeypatch.setattr("public_diary_tools.github_settings.requests.request", fake_request)
+
+    client = GitHubSettingsClient(
+        repository="owner/repo",
+        token="github-token",
+        base_url="https://api.example.test",
+    )
+
+    with pytest.raises(
+        GitHubNotFoundError,
+        match=r"PUT /repos/owner/repo/branches/main/protection.*Not Found",
+    ):
+        client.put_branch_protection("main", {"enforce_admins": True})
+
+
 def test_github_settings_client_creates_pages_site_before_update(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     client = GitHubSettingsClient(
@@ -326,6 +368,33 @@ def test_github_settings_client_ignores_pages_create_conflict(monkeypatch: pytes
         ("PUT", "/pages", {"build_type": "workflow", "cname": "notes.ah34.net", "https_enforced": True}),
         ("POST", "/pages", {"build_type": "workflow"}),
         ("PUT", "/pages", {"build_type": "workflow", "cname": "notes.ah34.net", "https_enforced": True}),
+    ]
+
+
+def test_github_settings_client_skips_https_until_pages_certificate_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    client = GitHubSettingsClient(
+        repository="owner/repo",
+        token="github-token",
+        base_url="https://api.example.test",
+    )
+    settings = {"build_type": "workflow", "cname": "notes.ah34.net", "https_enforced": True}
+
+    def fake_request(method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        calls.append((method, path, payload))
+        if len(calls) == 1:
+            raise GitHubPagesCertificatePendingError("certificate pending")
+        return {}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    client.update_pages(settings)
+
+    assert calls == [
+        ("PUT", "/pages", settings),
+        ("PUT", "/pages", {"build_type": "workflow", "cname": "notes.ah34.net"}),
     ]
 
 

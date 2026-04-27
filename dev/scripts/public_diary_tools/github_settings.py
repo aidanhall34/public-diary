@@ -17,8 +17,33 @@ class GitHubNotFoundError(RuntimeError):
     """GitHub returned 404 for a repository settings request."""
 
 
+class GitHubPagesCertificatePendingError(GitHubNotFoundError):
+    """GitHub Pages cannot enforce HTTPS until the custom-domain certificate exists."""
+
+
 class GitHubConflictError(RuntimeError):
     """GitHub returned 409 for a repository settings request."""
+
+
+def _response_body(response: requests.Response) -> Any:
+    try:
+        return response.json()
+    except ValueError:
+        return response.text
+
+
+def _response_detail(response: requests.Response) -> str:
+    body = _response_body(response)
+    if not body:
+        return ""
+    return f" Response: {body}"
+
+
+def _response_message(response: requests.Response) -> str:
+    body = _response_body(response)
+    if isinstance(body, dict):
+        return str(body.get("message", ""))
+    return str(body)
 
 
 class GitHubSettingsApi(Protocol):
@@ -65,17 +90,25 @@ class GitHubSettingsClient:
         try:
             response.raise_for_status()
         except HTTPError as exc:
+            request_description = f"{method} /repos/{self.repository}{path}"
             if response.status_code == 404:
+                message = _response_message(response)
+                if method == "PUT" and path == "/pages" and "certificate does not exist yet" in message.lower():
+                    raise GitHubPagesCertificatePendingError(
+                        f"GitHub Pages cannot enforce HTTPS for {request_description} yet because the custom-domain "
+                        f"certificate does not exist.{_response_detail(response)}",
+                    ) from exc
                 raise GitHubNotFoundError(
-                    "GitHub returned 404 while applying repository settings. "
+                    f"GitHub returned 404 for {request_description}. "
                     "Confirm the repository exists, the branch exists, and your GitHub token has repository "
                     "administration permission. Run `gh auth refresh -s repo -s workflow` and ensure your user "
-                    "can administer the repository.",
+                    f"can administer the repository.{_response_detail(response)}",
                 ) from exc
             if response.status_code == 409:
                 raise GitHubConflictError(
-                    "GitHub returned 409 while applying repository settings. "
-                    "This usually means the requested resource already exists or is not ready for mutation.",
+                    f"GitHub returned 409 for {request_description}. "
+                    "This usually means the requested resource already exists or is not ready for mutation."
+                    f"{_response_detail(response)}",
                 ) from exc
             raise
         try:
@@ -90,7 +123,7 @@ class GitHubSettingsClient:
     def branch_exists(self, branch: str) -> bool:
         try:
             self._request("GET", f"/branches/{branch}")
-        except RuntimeError:
+        except GitHubNotFoundError:
             return False
         return True
 
@@ -103,12 +136,21 @@ class GitHubSettingsClient:
     def update_pages(self, settings: dict[str, Any]) -> None:
         try:
             self._request("PUT", "/pages", settings)
+        except GitHubPagesCertificatePendingError:
+            fallback_settings = {key: value for key, value in settings.items() if key != "https_enforced"}
+            if fallback_settings:
+                self._request("PUT", "/pages", fallback_settings)
         except GitHubNotFoundError:
             try:
                 self.create_pages({"build_type": str(settings.get("build_type", "workflow"))})
             except GitHubConflictError:
                 pass
-            self._request("PUT", "/pages", settings)
+            try:
+                self._request("PUT", "/pages", settings)
+            except GitHubPagesCertificatePendingError:
+                fallback_settings = {key: value for key, value in settings.items() if key != "https_enforced"}
+                if fallback_settings:
+                    self._request("PUT", "/pages", fallback_settings)
 
     def put_branch_protection(self, branch: str, settings: dict[str, Any]) -> None:
         self._request("PUT", f"/branches/{branch}/protection", settings)
