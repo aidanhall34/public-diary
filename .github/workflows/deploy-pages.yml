@@ -36,6 +36,7 @@ jobs:
           fetch-depth: 0
 
       - name: Configure GitHub Pages
+        if: ${{ env.ACT != 'true' }}
         uses: actions/configure-pages@v5
 
       - name: Install uv
@@ -44,11 +45,24 @@ jobs:
           enable-cache: true
 
       - name: Set up Node.js
+        if: ${{ env.ACT == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Node.js with npm cache
+        if: ${{ env.ACT != 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: quartz/package-lock.json
+
+      - name: Install act system dependencies
+        if: ${{ env.ACT == 'true' }}
+        run: |
+          apt-get update
+          apt-get install -y rsync
 
       - name: Authenticate to Google Cloud
         if: ${{ env.ACT != 'true' }}
@@ -129,12 +143,14 @@ jobs:
           if git diff --cached --quiet -- vault; then
             echo "Vault already up to date."
           else
-            git commit -m "chore: sync vault from Google Drive [skip ci]"
+            git commit --no-verify -m "chore: sync vault from Google Drive [skip ci]"
             git push
           fi
 
       - name: Upload GitHub Pages artifact
-        if: steps.vault-changes.outputs.should_publish == 'true'
+        if: >-
+          steps.vault-changes.outputs.should_publish == 'true' && env.ACT !=
+          'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: quartz/public

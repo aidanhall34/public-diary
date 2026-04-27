@@ -23,3 +23,4 @@ A repo to manage deployment of my obsidian notes to github pages.
 - Python code is type checked with `mypy`
 - Commit changes to the repo using convention commits.
 - Always add an `Model-version:` footer at the bottom of commits the messages with the current model version
+- `Always` push after commits
