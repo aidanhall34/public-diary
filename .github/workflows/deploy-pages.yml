@@ -116,7 +116,8 @@ jobs:
           GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ vars.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
           GOOGLE_DRIVE_SHARED_DRIVE_ID: ${{ vars.GOOGLE_DRIVE_SHARED_DRIVE_ID }}
           GOOGLE_DRIVE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token ||
-            steps.auth_dwd.outputs.access_token || secrets.GOOGLE_DRIVE_ACCESS_TOKEN }}
+            steps.auth_dwd.outputs.access_token ||
+            secrets.GOOGLE_DRIVE_ACCESS_TOKEN }}
         run: |
           mkdir -p ~/.config/rclone
           cat > ~/.config/rclone/rclone.conf <<EOF
@@ -165,7 +166,8 @@ jobs:
         if: >-
           steps.vault-changes.outputs.should_publish == 'true' &&
           steps.vault-changes.outputs.vault_changed == 'true'
-        run: echo "Vault changed in the workflow workspace; direct pushes to main are blocked by branch rules."
+        run: echo "Vault changed in the workflow workspace; direct pushes to main are
+          blocked by branch rules."
 
       - name: Upload GitHub Pages artifact
         if: >-
@@ -191,8 +193,7 @@ jobs:
     needs:
       - build
       - deploy
-    if: ${{ always() && (contains(needs.*.result, 'failure') ||
-      contains(needs.*.result, 'cancelled')) }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

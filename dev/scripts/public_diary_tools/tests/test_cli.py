@@ -728,7 +728,7 @@ def test_parser_help_includes_command_descriptions(capsys: pytest.CaptureFixture
     assert "Write local act repository variables" in capsys.readouterr().out
 
 
-def test_notify_discord_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_notify_discord_failure_payload(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     sent: dict[str, Any] = {}
 
     class Response:
@@ -748,6 +748,7 @@ def test_notify_discord_payload(monkeypatch: pytest.MonkeyPatch) -> None:
         "GITHUB_SHA": "abcdef123456",
         "GITHUB_WORKFLOW": "Deploy",
         "GITHUB_RUN_NUMBER": "7",
+        "DISCORD_JOB_RESULTS": "build=success, deploy=failure",
     }
     old = os.environ.copy()
     os.environ.update(env)
@@ -759,9 +760,51 @@ def test_notify_discord_payload(monkeypatch: pytest.MonkeyPatch) -> None:
         os.environ.update(old)
 
     assert sent["url"] == "https://discord.example"
+    embed = sent["json"]["embeds"][0]
+    assert embed["title"] == "Workflow failed: Deploy"
+    assert embed["color"] == 15158332
     fields = cast(list[dict[str, str]], sent["json"]["embeds"][0]["fields"])
     assert fields[1]["value"] == "[owner/repo](https://github.com/owner/repo)"
     assert fields[3]["value"] == "[abcdef1](https://github.com/owner/repo/commit/abcdef123456)"
+    assert fields[6]["value"] == "build=success, deploy=failure"
+    assert "Discord failure notification sent." in capsys.readouterr().out
+
+
+def test_notify_discord_success_payload(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    sent: dict[str, Any] = {}
+
+    class Response:
+        def raise_for_status(self) -> None:
+            sent["ok"] = True
+
+    def fake_post(url: str, json: dict[str, Any], timeout: int) -> Response:  # noqa: A002
+        sent["url"] = url
+        sent["json"] = json
+        sent["timeout"] = timeout
+        return Response()
+
+    env = {
+        "DISCORD_WEBHOOK_URL": "https://discord.example",
+        "GITHUB_REPOSITORY": "owner/repo",
+        "GITHUB_RUN_ID": "42",
+        "GITHUB_SHA": "abcdef123456",
+        "GITHUB_WORKFLOW": "Deploy",
+        "GITHUB_RUN_NUMBER": "7",
+        "DISCORD_JOB_RESULTS": "build=success, deploy=skipped",
+    }
+    old = os.environ.copy()
+    os.environ.update(env)
+    try:
+        monkeypatch.setattr("public_diary_tools.cli.requests.post", fake_post)
+        assert cli.cmd_notify_discord(None) == 0
+    finally:
+        os.environ.clear()
+        os.environ.update(old)
+
+    embed = sent["json"]["embeds"][0]
+    assert embed["title"] == "Workflow succeeded: Deploy"
+    assert embed["color"] == 3066993
+    assert "Discord success notification sent." in capsys.readouterr().out
 
 
 def test_notify_discord_requires_webhook(monkeypatch: pytest.MonkeyPatch) -> None:

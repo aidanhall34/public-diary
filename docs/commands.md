@@ -217,7 +217,7 @@ options:
 ```text
 usage: public-diary-tools notify-discord [-h]
 
-Send a Discord failure notification for GitHub Actions.
+Send a Discord notification for a GitHub Actions workflow result.
 
 options:
   -h, --help  show this help message and exit
