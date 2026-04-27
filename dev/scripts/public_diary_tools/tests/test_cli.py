@@ -611,6 +611,9 @@ def test_github_request_and_manifest_helpers(monkeypatch: pytest.MonkeyPatch) ->
     manifest = cli._github_app_manifest("owner/repo", "http://callback")  # noqa: SLF001
 
     assert manifest["name"] == "Custom App"
+    assert manifest["url"] == "https://github.com/owner/repo"
+    assert manifest["redirect_url"] == "http://callback"
+    assert "hook_attributes" not in manifest
     assert manifest["default_permissions"]["contents"] == "write"
     assert calls[0][1] == "https://api.github.com/path"
 

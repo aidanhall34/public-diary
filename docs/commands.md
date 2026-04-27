@@ -331,7 +331,7 @@ Set these GitHub App repository permissions:
 - Pull requests: read and write. Required when the deploy workflow opens or finds the automated vault sync PR.
 
 No organization permissions, account permissions, webhook events, or webhook URL are required for this repository. The
-tool-generated manifest sets webhooks inactive.
+tool-generated manifest omits webhook configuration.
 
 Discord failure notifications use the optional
 `DISCORD_WEBHOOK_URL` repository secret. Write the local Discord file with

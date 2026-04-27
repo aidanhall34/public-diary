@@ -506,7 +506,6 @@ def _github_app_manifest(repo: str, callback_url: str) -> dict[str, Any]:
         "url": f"https://github.com/{repo}",
         "redirect_url": callback_url,
         "public": False,
-        "hook_attributes": {"active": False},
         "default_permissions": {
             "actions": "read",
             "contents": "write",
