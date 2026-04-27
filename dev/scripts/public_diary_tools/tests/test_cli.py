@@ -604,9 +604,13 @@ def test_main_returns_clean_exit_for_eof(monkeypatch: pytest.MonkeyPatch) -> Non
     assert cli.main(["write-act-files"]) == 130
 
 
-def test_main_success(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    webhook_file = tmp_path / "webhook"
+    monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(webhook_file))
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.example")
+
     assert cli.main(["write-discord-webhook"]) == 0
+    assert webhook_file.read_text() == "https://discord.example\n"
 
 
 def test_main_writes_json_debug_log(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
