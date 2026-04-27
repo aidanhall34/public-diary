@@ -13,9 +13,12 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "lxml>=6.1.0",
+    "mypy>=1.20.2",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.12",
+    "types-requests>=2.33.0.20260408",
     "yamllint>=1.38.0",
 ]
 
@@ -25,6 +28,20 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["B", "BLE", "E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+mypy_path = ["dev/scripts"]
+files = ["dev/scripts/public_diary_tools"]
+
+[[tool.mypy.overrides]]
+module = [
+    "google.*",
+    "googleapiclient.*",
+    "github.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 pythonpath = ["dev/scripts"]

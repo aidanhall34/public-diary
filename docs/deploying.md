@@ -28,13 +28,16 @@ Use:
 make serve
 ```
 
-This pulls the latest notes, stages the current vault into Quartz, and runs `npx quartz build --serve` for a local preview.
+This pulls the latest notes, stages the current vault into Quartz, and runs `npx quartz build --serve` for a local
+preview.
 
 ## Quartz configuration
 
 Do not hand-edit `quartz/quartz.config.ts` or `quartz/quartz.layout.ts`.
 
-This repository treats `config/quartz-site.json` and `config/quartz-layout.json` as the source of truth and uses `./dev/scripts/configure-quartz.mjs` to generate `quartz/quartz.config.ts` and `quartz/quartz.layout.ts` from those JSON files during build and serve flows.
+This repository treats `config/quartz-site.json` and `config/quartz-layout.json` as the source of truth and uses
+`./dev/scripts/configure-quartz.mjs` to generate `quartz/quartz.config.ts` and `quartz/quartz.layout.ts` from those JSON
+files during build and serve flows.
 
 ## Comments
 
@@ -42,7 +45,9 @@ Comments are enabled through Quartz's built-in Giscus component, configured in `
 
 Quartz handles the script injection itself. You should not add the raw `giscus.app/client.js` script manually.
 
-The current Quartz comments docs recommend using the `Announcements` discussion category for Giscus. This repository is configured with your provided `Q&A` category. If comment threads do not appear correctly, that category choice is the first thing to revisit.
+The current Quartz comments docs recommend using the `Announcements` discussion category for Giscus. This repository is
+configured with your provided `Q&A` category. If comment threads do not appear correctly, that category choice is the
+first thing to revisit.
 
 ## Prerequisites
 
@@ -83,7 +88,8 @@ No long-lived Google credential secret is required for the preferred setup.
 
 ## Runtime credentials
 
-The workflow uses `google-github-actions/auth` to mint an access token scoped to `https://www.googleapis.com/auth/drive.readonly`.
+The workflow uses `google-github-actions/auth` to mint an access token scoped to
+`https://www.googleapis.com/auth/drive.readonly`.
 
 No Google application-default credentials file is generated in the job.
 
@@ -115,21 +121,25 @@ The underlying clone step runs:
 rclone copy "vault:${GOOGLE_DRIVE_PATH}" vault/ --drive-skip-gdocs --create-empty-src-dirs --log-level INFO --exclude ".obsidian/**"
 ```
 
-Because the Google Drive remote is the source and the local workspace is the destination, the command reads from Drive and writes only to local disk.
+Because the Google Drive remote is the source and the local workspace is the destination, the command reads from Drive
+and writes only to local disk.
 
 Unlike your personal sync script, this repository does not use `rclone bisync`.
 
 ## Date handling and Obsidian markdown
 
-Quartz already supports Obsidian-flavored markdown through `Plugin.ObsidianFlavoredMarkdown()`, and this repository keeps that plugin enabled.
+Quartz already supports Obsidian-flavored markdown through `Plugin.ObsidianFlavoredMarkdown()`, and this repository
+keeps that plugin enabled.
 
-Quartz also ships with git-based date lookup by default. Because your timestamps are managed by Google Drive and sync clients rather than git history, this repository rewrites `Plugin.CreatedModifiedDate()` to prefer:
+Quartz also ships with git-based date lookup by default. Because your timestamps are managed by Google Drive and sync
+clients rather than git history, this repository rewrites `Plugin.CreatedModifiedDate()` to prefer:
 
 ```ts
 ["frontmatter", "filesystem"]
 ```
 
-That avoids git warnings for untracked notes and makes rendered dates come from note metadata or local file timestamps instead.
+That avoids git warnings for untracked notes and makes rendered dates come from note metadata or local file timestamps
+instead.
 
 ## Schedule note
 

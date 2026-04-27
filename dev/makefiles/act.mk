@@ -4,9 +4,15 @@ ACT_DIR := dev/act
 ACT_VAR_FILE := $(ACT_DIR)/vars.env
 ACT_SECRET_FILE := $(ACT_DIR)/secrets.env
 
-.PHONY: act-files act-test-publish act-test-sync-wiki act-run-publish
+.PHONY: act-files act-test-pr-validation act-test-publish act-test-sync-wiki act-run-publish
 
-act-files: provision-act-files
+act-files:
+	$(PYTHON_TOOL) write-act-files
+
+act-test-pr-validation: act-files
+	act push -W .github/workflows/pr-validation.yml -j lint -n $(ACT_DEPLOY_FLAGS) --secret-file $(ACT_SECRET_FILE)
+	act push -W .github/workflows/pr-validation.yml -j test -n $(ACT_DEPLOY_FLAGS) --secret-file $(ACT_SECRET_FILE)
+	act push -W .github/workflows/pr-validation.yml -j pre-commit -n $(ACT_DEPLOY_FLAGS) --secret-file $(ACT_SECRET_FILE)
 
 act-test-publish: act-files
 	act push -W .github/workflows/deploy-pages.yml -j build -n $(ACT_DEPLOY_FLAGS) --var-file $(ACT_VAR_FILE) --secret-file $(ACT_SECRET_FILE)

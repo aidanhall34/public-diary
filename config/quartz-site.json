@@ -7,7 +7,7 @@
     "provider": "plausible"
   },
   "locale": "en-US",
-  "baseUrl": "quartz.jzhao.xyz",
+  "baseUrl": "notes.ah34.net",
   "ignorePatterns": [
     "private",
     "templates",

@@ -1,0 +1,84 @@
+---
+name: Release metadata
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-metadata
+  cancel-in-progress: true
+
+jobs:
+  release-metadata:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Run Python tests
+        run: make pytests
+
+      - name: Generate coverage badge
+        run: make coverage-badge
+
+      - name: Commit coverage badge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md docs/README.md docs/images/coverage.svg
+          if git diff --cached --quiet; then
+            echo "Coverage badge already up to date."
+          else
+            git commit -m "test: update coverage badge [skip ci]"
+            git push
+          fi
+
+      - name: Generate tag and changelog
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npm run release:metadata
+
+  notify-failure:
+    needs:
+      - release-metadata
+    if: ${{ always() && (contains(needs.*.result, 'failure') ||
+      contains(needs.*.result, 'cancelled')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Notify Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DISCORD_JOB_RESULTS: "release-metadata=${{ needs.release-metadata.result }}"
+        run: make python-tool ARGS=notify-discord

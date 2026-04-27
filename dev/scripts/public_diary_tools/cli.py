@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import logging
 import os
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from string import Template
+from typing import Any, cast
 
 import requests
 
 from public_diary_tools.clients import (
-    DRIVE_READONLY_SCOPE,
     GithubClient,
     GoogleApis,
     active_gcloud_account,
@@ -18,8 +22,16 @@ from public_diary_tools.clients import (
     github_token_from_gh,
     repository_from_gh,
 )
-from public_diary_tools.config import active_user_member, build_act_vars, select_project
+from public_diary_tools.config import ActVars, active_user_member, build_act_vars, select_project, select_repository
+from public_diary_tools.coverage_badge import publish_coverage_badge
 from public_diary_tools.envfiles import is_dummy, read_env_file, write_env_file
+from public_diary_tools.github_settings import (
+    DEFAULT_SETTINGS_FILE,
+    GitHubSettingsClient,
+    apply_github_settings,
+    load_github_settings,
+)
+from public_diary_tools.json_tools import check_json_configs, format_json_configs
 from public_diary_tools.paths import act_secret_file, act_var_file, discord_webhook_file, google_drive_token_file
 
 REQUIRED_APIS = [
@@ -30,57 +42,142 @@ REQUIRED_APIS = [
     "serviceusage.googleapis.com",
 ]
 
+COMMANDS_DOC_TEMPLATE = Path(__file__).with_name("templates") / "commands.md.template"
+ROOT_MAKEFILE = Path("Makefile")
+LOG_LEVEL_ENV_NAMES = ("PUBLIC_DIARY_LOG_LEVEL", "LOG_LEVEL")
+LOGGER = logging.getLogger(__name__)
 
-def cmd_write_act_vars(_: argparse.Namespace) -> int:
+
+class JsonLogFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        return json.dumps(
+            {
+                "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat(),
+                "line_number": record.lineno,
+                "function_name": record.funcName,
+                "msg": record.getMessage(),
+                "level": record.levelname.lower(),
+            },
+        )
+
+
+def _env_log_level() -> str:
+    for name in LOG_LEVEL_ENV_NAMES:
+        value = os.environ.get(name)
+        if value:
+            return value
+    return "info"
+
+
+def _log_level_value(level: str) -> int:
+    normalized = level.upper()
+    value = logging.getLevelName(normalized)
+    if not isinstance(value, int):
+        raise ValueError(f"Invalid log level: {level}")
+    return value
+
+
+def _configure_logging(level: str, output: str) -> None:
+    handler: logging.Handler
+    if output == "stderr":
+        handler = logging.StreamHandler(sys.stderr)
+    else:
+        path = Path(output)
+        with path.open("a"):
+            pass
+        handler = logging.FileHandler(path, mode="a")
+    handler.setFormatter(JsonLogFormatter())
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(_log_level_value(level))
+
+
+def cmd_write_act_vars(_: argparse.Namespace | None) -> int:
     """Write local act repository variables from prompts and dynamic discovery."""
+    LOGGER.debug("writing act vars")
     act_vars = build_act_vars(GoogleApis())
     write_env_file(act_var_file(), act_vars.as_env())
     print(f"Wrote {act_var_file()}")
     return 0
 
 
-def cmd_upload_github_vars(_: argparse.Namespace) -> int:
+def cmd_format_json(_: argparse.Namespace | None) -> int:
+    """Format repository JSON config files."""
+    changed = format_json_configs()
+    if changed:
+        print("Formatted JSON config files:")
+        for path in changed:
+            print(f"- {path}")
+    else:
+        print("JSON config files already formatted.")
+    return 0
+
+
+def cmd_check_json(_: argparse.Namespace | None) -> int:
+    """Validate repository JSON config files without modifying them."""
+    unformatted = check_json_configs()
+    if unformatted:
+        print("JSON config files need formatting:")
+        for path in unformatted:
+            print(f"- {path}")
+        raise RuntimeError('Run make python-tool ARGS="format-json" to format JSON config files.')
+    print("JSON config files are formatted.")
+    return 0
+
+
+def cmd_coverage_badge(_: argparse.Namespace | None) -> int:
+    """Generate the README test coverage badge from pytest coverage JSON."""
+    percent, changed = publish_coverage_badge()
+    print(f"Coverage: {percent:.1f}%")
+    if changed:
+        print("Updated coverage badge files:")
+        for path in changed:
+            print(f"- {path}")
+    else:
+        print("Coverage badge files already up to date.")
+    return 0
+
+
+def cmd_upload_github_vars(_: argparse.Namespace | None) -> int:
     """Upload GitHub repository variables from dev/act/vars.env."""
+    LOGGER.debug("uploading github vars")
     values = read_env_file(act_var_file())
     if not values:
-        raise RuntimeError(f"Missing {act_var_file()}. Run make provision-act-vars first.")
-    client = GithubClient(repository_from_gh(), github_token_from_gh())
-    for name, value in values.items():
-        client.set_variable(name, value)
+        raise RuntimeError(f'Missing {act_var_file()}. Run make python-tool ARGS="write-act-vars" first.')
+    asyncio.run(_upload_github_vars(values, repository_from_gh(), github_token_from_gh()))
     print(f"Uploaded variables from {act_var_file()}.")
     return 0
 
 
-def cmd_write_discord_webhook(_: argparse.Namespace) -> int:
+def cmd_write_discord_webhook(_: argparse.Namespace | None) -> int:
     """Write the local Discord webhook URL file used by act and secret upload."""
-    webhook = os.environ.get("DISCORD_WEBHOOK_URL")
-    if not webhook:
-        webhook = input("Paste Discord webhook URL, then press Enter: ")
-    if not webhook:
-        raise RuntimeError("Discord webhook URL is required.")
-    discord_webhook_file().parent.mkdir(parents=True, exist_ok=True)
-    discord_webhook_file().write_text(f"{webhook}\n")
-    discord_webhook_file().chmod(0o600)
+    webhook = _prompt_discord_webhook()
+    _write_discord_webhook_file(webhook)
     print(f"Wrote {discord_webhook_file()}")
     return 0
 
 
-def cmd_upload_github_secrets(_: argparse.Namespace) -> int:
+def cmd_upload_github_secrets(_: argparse.Namespace | None) -> int:
     """Upload repository secrets such as DISCORD_WEBHOOK_URL."""
-    webhook = os.environ.get("DISCORD_WEBHOOK_URL")
-    if not webhook and discord_webhook_file().exists():
-        webhook = discord_webhook_file().read_text().strip()
-    if not webhook:
-        raise RuntimeError(f"DISCORD_WEBHOOK_URL is required or {discord_webhook_file()} must exist.")
-    GithubClient(repository_from_gh(), github_token_from_gh()).set_secret("DISCORD_WEBHOOK_URL", webhook)
+    webhook = _discord_webhook_value()
+    asyncio.run(_upload_discord_secret(webhook, repository_from_gh(), github_token_from_gh()))
     print("Uploaded DISCORD_WEBHOOK_URL.")
     return 0
 
 
-def cmd_write_act_files(_: argparse.Namespace) -> int:
+def cmd_apply_github_settings(_: argparse.Namespace | None) -> int:
+    """Apply GitHub repository and branch permissions from .github/config."""
+    applied = asyncio.run(_apply_github_settings(repository_from_gh(), github_token_from_gh()))
+    for item in applied:
+        print(f"Applied {item}")
+    return 0
+
+
+def cmd_write_act_files(_: argparse.Namespace | None) -> int:
     """Write local act variable and secret files."""
     if not act_var_file().exists():
-        raise RuntimeError(f"Missing {act_var_file()}. Run make provision-act-vars first.")
+        raise RuntimeError(f'Missing {act_var_file()}. Run make python-tool ARGS="write-act-vars" first.')
 
     values = {"GITHUB_TOKEN": github_token_from_gh()}
     if discord_webhook_file().exists():
@@ -112,7 +209,7 @@ def _project_from_service_account(service_account: str) -> str:
     return domain.removesuffix(".iam.gserviceaccount.com")
 
 
-def cmd_write_act_drive_token(_: argparse.Namespace) -> int:
+def cmd_write_act_drive_token(_: argparse.Namespace | None) -> int:
     """Write a local Google Drive read-only token for act."""
     service_account = _service_account_from_vars()
     project_id = _project_from_service_account(service_account)
@@ -127,7 +224,8 @@ def cmd_write_act_drive_token(_: argparse.Namespace) -> int:
         "roles/iam.serviceAccountTokenCreator",
         f"user:{user}",
     )
-    token = gcloud_impersonated_token(service_account, [DRIVE_READONLY_SCOPE])
+    LOGGER.debug("minting local act token with service account impersonation")
+    token = gcloud_impersonated_token(service_account)
     google_drive_token_file().parent.mkdir(parents=True, exist_ok=True)
     google_drive_token_file().write_text(f"{token}\n")
     google_drive_token_file().chmod(0o600)
@@ -135,7 +233,7 @@ def cmd_write_act_drive_token(_: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_configure_drive_access(_: argparse.Namespace) -> int:
+def cmd_configure_drive_access(_: argparse.Namespace | None) -> int:
     """Grant the deploy service account read access to the configured Drive target."""
     values = read_env_file(act_var_file())
     service_account = os.environ.get("SERVICE_ACCOUNT_EMAIL") or values.get("GCP_SERVICE_ACCOUNT", "")
@@ -154,11 +252,72 @@ def cmd_configure_drive_access(_: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_provision_auth(_: argparse.Namespace) -> int:
-    """Create or update Google Cloud auth and GitHub repository variables."""
-    google = GoogleApis()
-    project_id = select_project(google)
-    act_vars = build_act_vars(google)
+async def _upload_github_vars(values: dict[str, str], repo: str, token: str) -> None:
+    client = GithubClient(repo, token)
+    await asyncio.gather(*(_run_sync(client.set_variable, name, value) for name, value in values.items()))
+
+
+async def _upload_discord_secret(webhook: str, repo: str, token: str) -> None:
+    await _run_sync(GithubClient(repo, token).set_secret, "DISCORD_WEBHOOK_URL", webhook)
+
+
+async def _apply_github_settings(repo: str, token: str) -> list[str]:
+    settings_file = Path(os.environ.get("GITHUB_SETTINGS_FILE", DEFAULT_SETTINGS_FILE))
+    client = GitHubSettingsClient(repo, token)
+    return cast(list[str], await _run_sync(apply_github_settings, load_github_settings(settings_file), client))
+
+
+async def _run_sync(function: Callable[..., Any], *args: Any) -> Any:
+    await asyncio.sleep(0)
+    return function(*args)
+
+
+def _discord_webhook_value() -> str:
+    webhook = os.environ.get("DISCORD_WEBHOOK_URL")
+    if not webhook and discord_webhook_file().exists():
+        webhook = discord_webhook_file().read_text().strip()
+    if not webhook:
+        raise RuntimeError(f"DISCORD_WEBHOOK_URL is required or {discord_webhook_file()} must exist.")
+    return webhook
+
+
+def _write_discord_webhook_file(webhook: str) -> None:
+    discord_webhook_file().parent.mkdir(parents=True, exist_ok=True)
+    discord_webhook_file().write_text(f"{webhook}\n")
+    discord_webhook_file().chmod(0o600)
+
+
+def _prompt_discord_webhook() -> str:
+    webhook = os.environ.get("DISCORD_WEBHOOK_URL")
+    if not webhook and discord_webhook_file().exists():
+        webhook = discord_webhook_file().read_text().strip()
+    if not webhook:
+        webhook = input("Paste Discord webhook URL, then press Enter: ")
+    if not webhook:
+        raise RuntimeError("Discord webhook URL is required.")
+    return webhook
+
+
+def _configure_workload_identity(google: GoogleApis, project_number: str, repo: str) -> None:
+    pool_id = os.environ.get("WIF_POOL_ID", "github")
+    provider_id = os.environ.get("WIF_PROVIDER_ID", "public-diary")
+    if not google.workload_identity_pool_exists(project_number, pool_id):
+        google.create_workload_identity_pool(
+            project_number,
+            pool_id,
+            os.environ.get("WIF_POOL_DISPLAY_NAME", "GitHub Actions"),
+        )
+    if not google.workload_identity_provider_exists(project_number, pool_id, provider_id):
+        google.create_workload_identity_provider(
+            project_number,
+            pool_id,
+            provider_id,
+            repo,
+            os.environ.get("WIF_PROVIDER_DISPLAY_NAME", "GitHub repository"),
+        )
+
+
+def _provision_google_auth(google: GoogleApis, project_id: str, act_vars: ActVars, repo: str) -> None:
     service_account = act_vars.gcp_service_account
     account_id = service_account.split("@", 1)[0]
 
@@ -171,8 +330,8 @@ def cmd_provision_auth(_: argparse.Namespace) -> int:
         )
 
     project_number = google.project_number(project_id)
-    repo = repository_from_gh()
     wif_pool_id = os.environ.get("WIF_POOL_ID", "github")
+    _configure_workload_identity(google, project_number, repo)
     google.add_service_account_binding(
         project_id,
         service_account,
@@ -196,10 +355,56 @@ def cmd_provision_auth(_: argparse.Namespace) -> int:
     )
 
     write_env_file(act_var_file(), act_vars.as_env())
-    github = GithubClient(repo, github_token_from_gh())
-    for name, value in act_vars.as_env().items():
-        github.set_variable(name, value)
+
+
+def _grant_drive_access(google: GoogleApis, act_vars: ActVars) -> dict[str, str]:
+    target_id = act_vars.google_drive_root_folder_id or act_vars.google_drive_shared_drive_id
+    if not target_id:
+        raise RuntimeError("A Google Drive shared drive or root folder ID is required.")
+    return google.grant_drive_permission(
+        target_id,
+        act_vars.gcp_service_account,
+        os.environ.get("DRIVE_PERMISSION_ROLE", "reader"),
+    )
+
+
+def cmd_provision_auth(_: argparse.Namespace | None) -> int:
+    """Create or update Google Cloud auth and GitHub repository variables."""
+    LOGGER.info("starting auth provisioning")
+    google = GoogleApis()
+    project_id = select_project(google)
+    act_vars = build_act_vars(google)
+    repo = select_repository()
+    _provision_google_auth(google, project_id, act_vars, repo)
+    asyncio.run(_upload_github_vars(act_vars.as_env(), repo, github_token_from_gh()))
     print(f"Provisioned auth and wrote {act_var_file()}.")
+    return 0
+
+
+async def _provision_all_async(google: GoogleApis, act_vars: ActVars, repo: str, webhook: str) -> None:
+    token = github_token_from_gh()
+    await asyncio.gather(
+        _upload_github_vars(act_vars.as_env(), repo, token),
+        _apply_github_settings(repo, token),
+        _run_sync(_write_discord_webhook_file, webhook),
+        _upload_discord_secret(webhook, repo, token),
+        _run_sync(_grant_drive_access, google, act_vars),
+    )
+
+
+def cmd_provision_all(_: argparse.Namespace | None) -> int:
+    """Discover Drive values and provision Google, GitHub, Discord, and local act inputs."""
+    LOGGER.info("starting full provisioning")
+    google = GoogleApis()
+    project_id = select_project(google)
+    act_vars = build_act_vars(google)
+    repo = select_repository()
+    webhook = _prompt_discord_webhook()
+    _provision_google_auth(google, project_id, act_vars, repo)
+    asyncio.run(_provision_all_async(google, act_vars, repo, webhook))
+    cmd_write_act_drive_token(None)
+    cmd_write_act_files(None)
+    print("Provisioned Google, GitHub, Discord, Drive access, and local act inputs.")
     return 0
 
 
@@ -217,7 +422,7 @@ def _format_duration(started_at: str) -> str:
     return f"{seconds}s"
 
 
-def cmd_notify_discord(_: argparse.Namespace) -> int:
+def cmd_notify_discord(_: argparse.Namespace | None) -> int:
     """Send a Discord failure notification for GitHub Actions."""
     webhook = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook:
@@ -262,213 +467,79 @@ def cmd_notify_discord(_: argparse.Namespace) -> int:
     return 0
 
 
-PYTHON_MAKE_TARGETS = {
-    "provision-auth": "provision-auth",
-    "configure-drive-access": "provision-drive-access",
-    "write-act-vars": "provision-act-vars",
-    "upload-github-vars": "provision-github-vars",
-    "write-discord-webhook": "provision-discord-webhook-file",
-    "upload-github-secrets": "provision-github-secrets",
-    "write-act-drive-token": "provision-act-drive-token",
-    "write-act-files": "provision-act-files",
-}
-
-
-def _first_doc_line(function) -> str:
+def _first_doc_line(function: Callable[..., Any]) -> str:
     return (function.__doc__ or "").strip().splitlines()[0]
 
 
-def _command_functions() -> dict[str, object]:
+def _command_functions() -> dict[str, Callable[..., int]]:
     return {
         "write-act-vars": cmd_write_act_vars,
+        "format-json": cmd_format_json,
+        "check-json": cmd_check_json,
+        "coverage-badge": cmd_coverage_badge,
         "upload-github-vars": cmd_upload_github_vars,
         "write-discord-webhook": cmd_write_discord_webhook,
         "upload-github-secrets": cmd_upload_github_secrets,
+        "apply-github-settings": cmd_apply_github_settings,
         "write-act-drive-token": cmd_write_act_drive_token,
         "write-act-files": cmd_write_act_files,
         "configure-drive-access": cmd_configure_drive_access,
         "provision-auth": cmd_provision_auth,
+        "provision-all": cmd_provision_all,
         "notify-discord": cmd_notify_discord,
-        "print-tool-help": cmd_print_tool_help,
         "write-commands-doc": cmd_write_commands_doc,
     }
 
 
-def _render_python_tool_help() -> str:
-    lines = [
-        "Python tools run through make with uv and .venv activated.",
-        "",
-        "Common setup flow:",
-        "  make provision-act-vars",
-        "  make provision-github-vars",
-        "  make provision-discord-webhook-file",
-        "  make provision-github-secrets",
-        "  gcloud auth login",
-        "  make provision-act-drive-token",
-        "  make provision-act-files",
-        "  make act-run-publish",
-        "",
-        "Python-backed Make targets:",
-    ]
-    for command, target in PYTHON_MAKE_TARGETS.items():
-        lines.append(f"  make {target:<32} {_first_doc_line(_command_functions()[command])}")
-    lines.extend(
-        [
-            "",
-            "Direct CLI form:",
-            "  PYTHONPATH=dev/scripts uv run python -m public_diary_tools.cli --help",
-            "  PYTHONPATH=dev/scripts uv run python -m public_diary_tools.cli <command>",
-            "",
-            "Docs: docs/commands.md",
-        ],
-    )
-    return "\n".join(lines)
+def _makefile_paths(makefile: Path = ROOT_MAKEFILE) -> list[Path]:
+    paths = [makefile]
+    if not makefile.exists():
+        return paths
+    for line in makefile.read_text().splitlines():
+        words = line.strip().split()
+        if words and words[0] == "include":
+            paths.extend(Path(word) for word in words[1:])
+    return paths
 
 
-def _render_commands_doc() -> str:
-    common_commands = {
-        "pre-commit": "regenerate docs and fail if generated docs need to be staged",
-        "test": "run pytest, check makefiles, and dry-run the GitHub Actions workflows with act",
-        "setup": "install root and Quartz dependencies, configure hooks, bootstrap Quartz, and generate Quartz config",
-        "build": "pull the latest notes, bootstrap Quartz if needed, and build the static site",
-        "serve": "pull the latest notes, bootstrap Quartz if needed, and serve the site locally with Quartz",
-        "docs-commands": "regenerate docs/commands.md from Python command help strings",
-        "python-tools": "print the Python tooling usage guide",
-        "act-run-publish": "run the deploy workflow build job locally with act",
-        "ruff": "lint Python tooling with Ruff",
-        "yamllint": "lint YAML files with yamllint",
-        "checkmake": "lint makefiles with checkmake",
-        "markdownlint": "lint Markdown files with markdownlint",
-        "lint": "run all linting recipes",
-        "pytests": "run Python tests with pytest and coverage",
-    }
-    lines = [
-        "# Commands",
-        "",
-        "## Main components",
-        "",
-        "- `Makefile`: local setup, staging, build, provisioning, and validation entry points",
-        "- `config/quartz-site.json`: source-of-truth site settings used to generate `quartz/quartz.config.ts`",
-        "- `config/quartz-layout.json`: source-of-truth layout settings used to generate `quartz/quartz.layout.ts`",
-        "- `dev/makefiles/`: composable makefile fragments for repo setup, Quartz, Drive sync, docs, "
-        "provisioning, and `act`",
-        "- `dev/scripts/public_diary_tools/`: Python 3.13 provisioning, GitHub, Google Drive, Discord, "
-        "and `act` helper package with colocated tests",
-        "- `pyproject.toml`: Python dependencies, Ruff config, pytest config, and coverage threshold",
-        "- `.github/workflows/deploy-pages.yml`: scheduled and on-demand Pages deployment",
-        "- `.github/workflows/sync-wiki.yml`: publishes `docs/` to the GitHub wiki",
-        "- `.githooks/`: tracked git hooks configured automatically by `make build` or `make serve`",
-        "- `docs/`: project documentation mirrored to the wiki",
-        "",
-        "## Common commands",
-        "",
-    ]
-    lines.extend(f"- `make {target}`: {description}" for target, description in common_commands.items())
-    lines.extend(
-        [
-            "",
-            "## Python-backed provisioning commands",
-            "",
-        ],
-    )
-    for command, target in PYTHON_MAKE_TARGETS.items():
-        lines.append(f"- `make {target}`: {_first_doc_line(_command_functions()[command])}")
-    lines.extend(
-        [
-            "",
-            "The same tools can be run directly with:",
-            "",
-            "```sh",
-            "PYTHONPATH=dev/scripts uv run python -m public_diary_tools.cli --help",
-            "PYTHONPATH=dev/scripts uv run python -m public_diary_tools.cli <command>",
-            "```",
-            "",
-            "Regenerate this command list from Python help strings with:",
-            "",
-            "```sh",
-            "make docs-commands",
-            "```",
-            "",
-            "## Provisioning notes",
-            "",
-            "This repository uses GitHub Actions OIDC, Google Workload Identity Federation, and a Google Cloud "
-            "service account to read the Google Drive vault without storing a Google key in GitHub.",
-            "",
-            "Authenticate locally before provisioning:",
-            "",
-            "```sh",
-            "gcloud auth login --enable-gdrive-access",
-            "gh auth login",
-            "```",
-            "",
-            "If the provisioning run needs to configure Google Drive sharing, authenticate application-default "
-            "credentials with Drive permission-management scope:",
-            "",
-            "```sh",
-            "gcloud auth application-default login \\",
-            "  --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/drive",
-            "```",
-            "",
-            "`make provision-auth` enables the required Google Cloud APIs, creates or reuses the deploy service "
-            "account, configures Workload Identity Federation for this repository, grants token creation "
-            "permissions needed by GitHub Actions and local `act`, uploads GitHub repository variables, "
-            "and writes `dev/act/vars.env`. No Google service account key is generated.",
-            "",
-            "The GitHub Actions build mints a short-lived OAuth access token with only "
-            "`https://www.googleapis.com/auth/drive.readonly` and passes it directly to `rclone`.",
-            "",
-            "Google Drive permissions are managed through the Drive API, not a `gcloud drive` command group. "
-            "Use `make provision-drive-access` after `dev/act/vars.env` exists, or set `DRIVE_TARGET_ID` "
-            "to a Shared Drive ID, folder ID, or file ID. For Shared Drives, the authenticated user must be "
-            "an organizer. Set `DRIVE_USE_DOMAIN_ADMIN_ACCESS=true` only when making Workspace administrator "
-            "changes across the domain.",
-            "",
-            "Prefer Shared Drive membership when possible. If the vault must stay in a user's My Drive, configure "
-            "Google Workspace domain-wide delegation for the service account, authorize only the Drive scopes "
-            "needed, and set `GOOGLE_WORKSPACE_USER`.",
-            "",
-            "GitHub repository variables written by the tooling:",
-            "",
-            "- `GCP_WORKLOAD_IDENTITY_PROVIDER`",
-            "- `GCP_SERVICE_ACCOUNT`",
-            "- `GOOGLE_DRIVE_SHARED_DRIVE_ID`",
-            "- `GOOGLE_DRIVE_ROOT_FOLDER_ID`",
-            "- `GOOGLE_DRIVE_PATH`",
-            "- `GOOGLE_WORKSPACE_USER`",
-            "",
-            "Discord failure notifications use the `DISCORD_WEBHOOK_URL` repository secret. Write the local file "
-            "with `make provision-discord-webhook-file`, then upload it with `make provision-github-secrets`. "
-            "GitHub secrets are write-only through `gh`, so the tooling uploads the value but cannot read it "
-            "back later.",
-            "",
-            "Generate local `act` inputs with:",
-            "",
-            "```sh",
-            "make provision-act-vars",
-            "make provision-act-drive-token",
-            "make provision-act-files",
-            "```",
-            "",
-            "This writes `dev/act/vars.env`, `dev/act/secrets.env`, and `dev/act/google-drive-access-token`. "
-            "These files are intentionally ignored by git. The secrets file includes a short-lived "
-            "`GITHUB_TOKEN` from `gh auth token`, and includes `DISCORD_WEBHOOK_URL` and "
-            "`GOOGLE_DRIVE_ACCESS_TOKEN` when their local files exist.",
-            "",
-            "`make provision-act-vars` discovers the current `gcloud` project, lists accessible projects when "
-            "needed, prompts for missing values, ignores stale dummy values, and can list visible Shared Drives "
-            "after `gcloud auth login --enable-gdrive-access`.",
-        ],
-    )
-    return "\n".join(lines)
+def _make_targets(makefile: Path = ROOT_MAKEFILE) -> list[str]:
+    targets: list[str] = []
+    for path in _makefile_paths(makefile):
+        if not path.exists():
+            continue
+        for line in path.read_text().splitlines():
+            if not line.startswith(".PHONY:"):
+                continue
+            for target in line.removeprefix(".PHONY:").split():
+                if target not in targets:
+                    targets.append(target)
+    return targets
 
 
-def cmd_print_tool_help(_: argparse.Namespace) -> int:
-    """Print the Python tooling usage guide."""
-    print(_render_python_tool_help())
-    return 0
+def _render_common_commands() -> str:
+    return "\n".join(f"- `make {target}`" for target in _make_targets())
 
 
-def cmd_write_commands_doc(_: argparse.Namespace) -> int:
+def _render_python_tool_commands() -> str:
+    sections = []
+    for command, function in _command_functions().items():
+        parser = argparse.ArgumentParser(
+            prog=f"public-diary-tools {command}",
+            description=_first_doc_line(function),
+        )
+        sections.append(f"### `{command}`\n\n```text\n{parser.format_help().strip()}\n```")
+    return "\n\n".join(sections)
+
+
+def _render_commands_doc(template_path: Path = COMMANDS_DOC_TEMPLATE) -> str:
+    template = Template(template_path.read_text())
+    return template.substitute(
+        common_commands=_render_common_commands(),
+        python_tool_commands=_render_python_tool_commands(),
+    ).rstrip()
+
+
+def cmd_write_commands_doc(_: argparse.Namespace | None) -> int:
     """Regenerate docs/commands.md from Python command help strings."""
     Path("docs/commands.md").write_text(f"{_render_commands_doc()}\n")
     print("Wrote docs/commands.md")
@@ -477,6 +548,17 @@ def cmd_write_commands_doc(_: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="public-diary-tools")
+    parser.add_argument(
+        "--log-level",
+        default=_env_log_level(),
+        help="JSON log level; env PUBLIC_DIARY_LOG_LEVEL or LOG_LEVEL also works.",
+    )
+    parser.add_argument(
+        "--log-output",
+        default="stderr",
+        help="JSON log output path to append to, or stderr.",
+    )
+    parser.add_argument("--debug", action="store_true", help="Shortcut for --log-level debug.")
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name, function in _command_functions().items():
         subparser = subparsers.add_parser(name, help=_first_doc_line(function), description=_first_doc_line(function))
@@ -487,7 +569,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        return args.func(args)
+        log_level = "debug" if getattr(args, "debug", False) else str(getattr(args, "log_level", _env_log_level()))
+        log_output = str(getattr(args, "log_output", "stderr"))
+        _configure_logging(log_level, log_output)
+        LOGGER.debug("configured logging")
+        func = cast(Callable[[argparse.Namespace], int], args.func)
+        return func(args)
+    except KeyboardInterrupt:
+        print("Cancelled by user.", file=sys.stderr)
+        return 130
+    except EOFError:
+        print("Input cancelled by user.", file=sys.stderr)
+        return 130
     except Exception as exc:  # noqa: BLE001 - CLI should print clean operational errors.
         print(str(exc), file=sys.stderr)
         return 1

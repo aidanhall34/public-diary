@@ -4,7 +4,7 @@ docs-readme-sync:
 	cp README.md docs/README.md
 
 docs-commands: venv
-	$(PYTHON_ENV) $(UV) run python -m public_diary_tools.cli write-commands-doc
+	$(PYTHON_TOOL) write-commands-doc
 
 docs-generated-check:
 	@if ! git diff --quiet -- docs; then \

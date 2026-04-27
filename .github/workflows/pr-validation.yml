@@ -1,0 +1,129 @@
+---
+name: Branch Validation
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: branch-validation
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: make lint
+
+  test:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Run Python tests
+        run: make pytests
+
+      - name: Generate coverage badge
+        run: make coverage-badge
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-coverage
+          path: |
+            docs/images/coverage.svg
+            dev/scripts/test_out/coverage.json
+            dev/scripts/test_out/htmlcov
+
+  pre-commit:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Run pre-commit checks
+        run: make pre-commit
+
+  notify-failure:
+    needs:
+      - lint
+      - test
+      - pre-commit
+    if: ${{ always() && (contains(needs.*.result, 'failure') ||
+      contains(needs.*.result, 'cancelled')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Notify Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DISCORD_JOB_RESULTS: >-
+            lint=${{ needs.lint.result }}, test=${{ needs.test.result }},
+            pre-commit=${{ needs.pre-commit.result }}
+        run: make python-tool ARGS=notify-discord

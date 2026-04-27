@@ -5,23 +5,30 @@ on:
   push:
     branches:
       - main
+    paths:
+      - vault/**
+      - config/**
+      - dev/scripts/configure-quartz.mjs
+      - .github/workflows/deploy-pages.yml
   schedule:
     - cron: "0 14 * * *"
   workflow_dispatch:
 
 permissions:
   actions: read
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-24.04
+    outputs:
+      should_publish: ${{ steps.vault-changes.outputs.should_publish }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,6 +37,11 @@ jobs:
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -71,19 +83,64 @@ jobs:
           team_drive = ${GOOGLE_DRIVE_SHARED_DRIVE_ID}
           EOF
 
-      - name: Build site
+      - name: Pull latest vault contents
         env:
           GOOGLE_DRIVE_REMOTE: vault
           GOOGLE_DRIVE_PATH: ${{ vars.GOOGLE_DRIVE_PATH }}
-        run: make build
+        run: make notes-clone
+
+      - name: Detect vault changes
+        id: vault-changes
+        run: |
+          if git diff --quiet -- vault; then
+            vault_changed=false
+          else
+            vault_changed=true
+          fi
+
+          should_publish=true
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] && [ "${vault_changed}" = "false" ]; then
+            should_publish=false
+          fi
+
+          {
+            echo "vault_changed=${vault_changed}"
+            echo "should_publish=${should_publish}"
+          } >> "${GITHUB_OUTPUT}"
+
+          if [ "${should_publish}" = "false" ]; then
+            echo "No vault changes detected on scheduled run; skipping build and publish."
+          fi
+
+      - name: Build site
+        if: steps.vault-changes.outputs.should_publish == 'true'
+        run: make quartz-build
+
+      - name: Commit synced vault changes
+        if: >-
+          steps.vault-changes.outputs.should_publish == 'true' &&
+          steps.vault-changes.outputs.vault_changed == 'true' &&
+          env.ACT != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vault
+          if git diff --cached --quiet -- vault; then
+            echo "Vault already up to date."
+          else
+            git commit -m "chore: sync vault from Google Drive [skip ci]"
+            git push
+          fi
 
       - name: Upload GitHub Pages artifact
+        if: steps.vault-changes.outputs.should_publish == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: quartz/public
 
   deploy:
     needs: build
+    if: needs.build.outputs.should_publish == 'true'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -103,13 +160,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
       - name: Notify Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           GITHUB_TOKEN: ${{ github.token }}
           DISCORD_JOB_RESULTS: "build=${{ needs.build.result }}, deploy=${{ needs.deploy.result }}"
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          export PATH="$HOME/.local/bin:$PATH"
-          UV_CACHE_DIR=/tmp/uv-cache uv sync --all-groups
-          PYTHONPATH=dev/scripts uv run python -m public_diary_tools.cli notify-discord
+        run: make python-tool ARGS=notify-discord

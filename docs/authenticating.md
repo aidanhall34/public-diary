@@ -15,12 +15,10 @@ This avoids storing a long-lived Google refresh token or service account key in 
 
 ## Runtime flow
 
-1. The workflow starts in GitHub Actions.
-2. GitHub presents its OIDC identity token to Google.
-3. Google Workload Identity Federation exchanges that identity for a short-lived Google credential.
-4. `google-github-actions/auth` mints a short-lived OAuth access token scoped only to Google Drive read access.
-5. `rclone` uses that bearer token directly.
-6. The job finishes and the token expires.
+1. The workflow starts in GitHub Actions. 2. GitHub presents its OIDC identity token to Google. 3. Google Workload
+   Identity Federation exchanges that identity for a short-lived Google credential. 4. `google-github-actions/auth`
+   mints a short-lived OAuth access token scoped only to Google Drive read access. 5. `rclone` uses that bearer token
+   directly. 6. The job finishes and the token expires.
 
 ## Why this is the preferred path
 
@@ -34,12 +32,14 @@ This avoids storing a long-lived Google refresh token or service account key in 
 
 Set these GitHub repository variables:
 
-- `GCP_WORKLOAD_IDENTITY_PROVIDER`: full provider resource name, for example `projects/123456789/locations/global/workloadIdentityPools/github/providers/public-diary`
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`: full provider resource name, for example
+  `projects/123456789/locations/global/workloadIdentityPools/github/providers/public-diary`
 - `GCP_SERVICE_ACCOUNT`: service account email used by the workflow
 - `GOOGLE_DRIVE_SHARED_DRIVE_ID`: Shared Drive ID containing the vault
 - `GOOGLE_DRIVE_ROOT_FOLDER_ID`: optional folder ID inside the drive to use as the vault root
 - `GOOGLE_DRIVE_PATH`: optional path inside the configured remote root, for example `obs-notes/obs-notes`
-- `GOOGLE_WORKSPACE_USER`: optional Workspace user email for domain-wide delegation impersonation when reading from a user's My Drive instead of a Shared Drive
+- `GOOGLE_WORKSPACE_USER`: optional Workspace user email for domain-wide delegation impersonation when reading from a
+  user's My Drive instead of a Shared Drive
 
 ## Google-side requirements
 
@@ -53,7 +53,8 @@ Set these GitHub repository variables:
 
 Put the vault in a Shared Drive and add the service account as a member of that Shared Drive.
 
-This is the cleanest option because service accounts cannot own Drive content and Shared Drives are designed for non-human access patterns.
+This is the cleanest option because service accounts cannot own Drive content and Shared Drives are designed for
+non-human access patterns.
 
 For this model:
 
@@ -65,7 +66,8 @@ Grant the service account the minimum access needed, ideally read-only access if
 
 ## If the vault is in a user's My Drive
 
-If you must read from a user's My Drive, use domain-wide delegation and `impersonate` the Workspace user instead of storing a user refresh token.
+If you must read from a user's My Drive, use domain-wide delegation and `impersonate` the Workspace user instead of
+storing a user refresh token.
 
 That path is more sensitive because it grants the service account delegated access to user data.
 
@@ -97,13 +99,17 @@ rclone copy "vault:${GOOGLE_DRIVE_PATH}" vault/ --drive-skip-gdocs --create-empt
 
 This is intentionally modeled as a one-way clone of your reference script, but it uses `copy` instead of `bisync`.
 
-This command reads from the `vault:` Google Drive remote and writes only to the local `vault/` directory in the runner workspace.
+This command reads from the `vault:` Google Drive remote and writes only to the local `vault/` directory in the runner
+workspace.
 
-The repository should not use `rclone bisync`, `rclone copy`, or `rclone sync` with local paths as the source and Google Drive as the destination.
+The repository should not use `rclone bisync`, `rclone copy`, or `rclone sync` with local paths as the source and Google
+Drive as the destination.
 
 ## Notes
 
 - Prefer Shared Drive membership over domain-wide delegation if you control the Drive layout.
 - Do not store a Google service account key JSON in GitHub unless you have no alternative.
-- If a future build exceeds the one-hour token lifetime, split the workflow or redesign the sync so it completes within the token lifetime.
-- Discord notifications use only the `DISCORD_WEBHOOK_URL` GitHub secret and run after workflow job failure or cancellation.
+- If a future build exceeds the one-hour token lifetime, split the workflow or redesign the sync so it completes within
+  the token lifetime.
+- Discord notifications use only the `DISCORD_WEBHOOK_URL` GitHub secret and run after workflow job failure or
+  cancellation.

@@ -1,13 +1,17 @@
-UV := UV_CACHE_DIR=/tmp/uv-cache UV_LINK_MODE=copy uv
-PYTHON_ENV := . .venv/bin/activate && PYTHONPATH=dev/scripts
+.PHONY: ruff mypy yamllint jsonlint markdownlint
 
 ruff: venv
-	$(PYTHON_ENV) $(UV) run ruff check .
+	$(PYTHON_ENV) $(UV) run ruff check --preview .
+
+mypy: venv
+	mkdir -p dev/scripts/test_out
+	$(PYTHON_ENV) $(UV) run mypy --html-report dev/scripts/test_out/mypy_html_report --linecoverage-report dev/scripts/test_out/mypy_linecoverage_report
 
 yamllint: venv
-	$(PYTHON_ENV) $(UV) run yamllint .
+	$(PYTHON_ENV) $(UV) run yamllint --strict .
 
-.PHONY: ruff yamllint markdownlint
+jsonlint: venv
+	$(PYTHON_TOOL) check-json
 
 markdownlint:
 	npx markdownlint --dot .
