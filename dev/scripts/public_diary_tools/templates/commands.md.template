@@ -81,7 +81,8 @@ Drive ID, folder ID, or file ID. For Shared Drives, the authenticated user must 
 `DRIVE_USE_DOMAIN_ADMIN_ACCESS=true` only when making Workspace administrator changes across the domain.
 
 Prefer Shared Drive membership when possible. If the vault must stay in a user's My Drive, configure Google Workspace
-domain-wide delegation for the service account, authorize only the Drive scopes needed, and set `GOOGLE_WORKSPACE_USER`.
+domain-wide delegation for the service account, authorize only the Drive scopes needed, set
+`GOOGLE_WORKSPACE_DELEGATION_ENABLED=true`, and set `GOOGLE_WORKSPACE_USER`.
 
 GitHub repository variables written by the tooling:
 
@@ -90,6 +91,7 @@ GitHub repository variables written by the tooling:
 - `GOOGLE_DRIVE_SHARED_DRIVE_ID`
 - `GOOGLE_DRIVE_ROOT_FOLDER_ID`
 - `GOOGLE_DRIVE_PATH`
+- `GOOGLE_WORKSPACE_DELEGATION_ENABLED`
 - `GOOGLE_WORKSPACE_USER`
 
 GitHub Pages first-run enablement uses the `PAGES_ADMIN_TOKEN` repository secret, which is uploaded from

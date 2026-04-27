@@ -35,6 +35,11 @@ jobs:
       - name: Sync root README into docs
         run: make docs-readme-sync
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
       - name: Stage docs into wiki
         run: make docs-wiki-stage
 

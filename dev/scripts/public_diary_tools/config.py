@@ -40,6 +40,7 @@ class ActVars:
     gcp_service_account: str
     google_drive_root_folder_id: str
     google_drive_shared_drive_id: str
+    google_workspace_delegation_enabled: str
     google_workspace_user: str
     google_drive_path: str
 
@@ -49,6 +50,7 @@ class ActVars:
             "GCP_SERVICE_ACCOUNT": self.gcp_service_account,
             "GOOGLE_DRIVE_ROOT_FOLDER_ID": self.google_drive_root_folder_id,
             "GOOGLE_DRIVE_SHARED_DRIVE_ID": self.google_drive_shared_drive_id,
+            "GOOGLE_WORKSPACE_DELEGATION_ENABLED": self.google_workspace_delegation_enabled,
             "GOOGLE_WORKSPACE_USER": self.google_workspace_user,
             "GOOGLE_DRIVE_PATH": self.google_drive_path,
         }
@@ -300,6 +302,7 @@ def build_act_vars(
 
     if shared_drive_id:
         google_workspace_user = ""
+        google_workspace_delegation_enabled = ""
         if env_or_existing("GOOGLE_WORKSPACE_USER", existing):
             info(
                 "Ignoring GOOGLE_WORKSPACE_USER because GOOGLE_DRIVE_SHARED_DRIVE_ID is set.",
@@ -317,6 +320,7 @@ def build_act_vars(
             output_fn=output_fn,
             custom_label="Custom Workspace user",
         )
+        google_workspace_delegation_enabled = "true" if google_workspace_user else ""
 
     return ActVars(
         gcp_workload_identity_provider=prompt_setting(
@@ -339,6 +343,7 @@ def build_act_vars(
         ),
         google_drive_root_folder_id=root_folder_id,
         google_drive_shared_drive_id=shared_drive_id,
+        google_workspace_delegation_enabled=google_workspace_delegation_enabled,
         google_workspace_user=google_workspace_user,
         google_drive_path=drive_path,
     )
