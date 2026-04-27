@@ -26,6 +26,8 @@ class GitHubSettingsApi(Protocol):
 
     def update_ruleset(self, ruleset_id: int, settings: dict[str, Any]) -> None: ...
 
+    def delete_ruleset(self, ruleset_id: int) -> None: ...
+
 
 @dataclass
 class GitHubSettingsClient:
@@ -87,6 +89,9 @@ class GitHubSettingsClient:
     def update_ruleset(self, ruleset_id: int, settings: dict[str, Any]) -> None:
         self._request("PUT", f"/rulesets/{ruleset_id}", settings)
 
+    def delete_ruleset(self, ruleset_id: int) -> None:
+        self._request("DELETE", f"/rulesets/{ruleset_id}")
+
 
 def load_github_settings(path: Path = DEFAULT_SETTINGS_FILE) -> dict[str, Any]:
     return cast(dict[str, Any], json.loads(path.read_text()))
@@ -135,4 +140,21 @@ def apply_github_settings(settings: dict[str, Any], client: GitHubSettingsApi) -
             else:
                 client.create_ruleset(ruleset)
             applied.append(f"ruleset:{ruleset_name}")
+
+    delete_rulesets = settings.get("delete_rulesets", [])
+    if not isinstance(delete_rulesets, list):
+        raise TypeError("delete_rulesets settings must be an array")
+    if delete_rulesets:
+        rulesets_by_name = {
+            str(ruleset["name"]): int(ruleset["id"])
+            for ruleset in client.list_rulesets()
+            if isinstance(ruleset.get("name"), str) and isinstance(ruleset.get("id"), int)
+        }
+        for ruleset_name in delete_rulesets:
+            if not isinstance(ruleset_name, str):
+                raise TypeError("delete_rulesets settings must contain names")
+            ruleset_id = rulesets_by_name.get(ruleset_name)
+            if ruleset_id is not None:
+                client.delete_ruleset(ruleset_id)
+                applied.append(f"delete-ruleset:{ruleset_name}")
     return applied

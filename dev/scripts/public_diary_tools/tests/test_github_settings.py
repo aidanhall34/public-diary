@@ -38,6 +38,9 @@ class FakeGitHub:
     def update_ruleset(self, ruleset_id: int, settings: dict[str, Any]) -> None:
         self.calls.append(("update-ruleset", str(ruleset_id), settings))
 
+    def delete_ruleset(self, ruleset_id: int) -> None:
+        self.calls.append(("delete-ruleset", str(ruleset_id), {}))
+
 
 def test_load_github_settings(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
@@ -76,6 +79,21 @@ def test_apply_github_settings_updates_existing_rulesets() -> None:
     assert client.calls == [
         ("rulesets", "", {}),
         ("update-ruleset", "42", {"name": "main pull request reviews", "enforcement": "active"}),
+    ]
+
+
+def test_apply_github_settings_deletes_named_rulesets() -> None:
+    client = FakeGitHub()
+    client.rulesets = [
+        {"id": 41, "name": "main"},
+        {"id": 42, "name": "main pull request reviews"},
+    ]
+    settings = {"delete_rulesets": ["main", "missing"]}
+
+    assert apply_github_settings(settings, client) == ["delete-ruleset:main"]
+    assert client.calls == [
+        ("rulesets", "", {}),
+        ("delete-ruleset", "41", {}),
     ]
 
 
@@ -118,6 +136,7 @@ def test_github_settings_client_requests(monkeypatch: pytest.MonkeyPatch) -> Non
     assert client.list_rulesets() == [{"id": 42, "name": "main pull request reviews"}]
     client.create_ruleset({"name": "new ruleset"})
     client.update_ruleset(42, {"name": "main pull request reviews"})
+    client.delete_ruleset(42)
     assert client.default_branch() == "main"
     assert client.branch_exists("main")
 
@@ -183,6 +202,18 @@ def test_github_settings_client_requests(monkeypatch: pytest.MonkeyPatch) -> Non
         ),
         ("raise_for_status",),
         (
+            "DELETE",
+            "https://api.example.test/repos/owner/repo/rulesets/42",
+            {
+                "Accept": "application/vnd.github+json",
+                "Authorization": "Bearer github-token",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            None,
+            30,
+        ),
+        ("raise_for_status",),
+        (
             "GET",
             "https://api.example.test/repos/owner/repo",
             {
@@ -225,6 +256,12 @@ def test_apply_github_settings_rejects_invalid_shapes() -> None:
 
     with pytest.raises(TypeError, match="rulesets"):
         apply_github_settings({"rulesets": [{}]}, client)
+
+    with pytest.raises(TypeError, match="delete_rulesets"):
+        apply_github_settings({"delete_rulesets": {}}, client)
+
+    with pytest.raises(TypeError, match="delete_rulesets"):
+        apply_github_settings({"delete_rulesets": [1]}, client)
 
     with pytest.raises(RuntimeError, match="branch not found"):
         apply_github_settings({"branches": {"missing": {}}}, client)
