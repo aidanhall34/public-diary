@@ -180,10 +180,12 @@ The batch command creates the GitHub App when no local app credentials exist. To
 make python-tool ARGS="provision-github-app"
 ```
 
-The command prints a GitHub App manifest URL, runs a local callback listener, converts the returned manifest code into
-an app private key, prompts you to install the app, adds this repository to the installation when the installation uses
-selected repositories, uploads `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_PRIVATE_KEY` to repository secrets, and writes
-`dev/act/github-app.env` for local `act` runs.
+The command prints a local `127.0.0.1` start URL. Open that URL in your browser; it serves a small form that posts the
+manifest to GitHub and starts a local callback listener. After GitHub creates the app, it redirects back to the local
+callback with a temporary code. The tool converts that code into an app private key, prompts you to install the app,
+adds this repository to the installation when the installation uses selected repositories, uploads
+`GITHUB_APP_CLIENT_ID` and `GITHUB_APP_PRIVATE_KEY` to repository secrets, and writes `dev/act/github-app.env` for local
+`act` runs.
 
 Set these GitHub App repository permissions:
 

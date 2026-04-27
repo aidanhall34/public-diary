@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import io
 import json
 import os
 from collections.abc import Callable
@@ -625,6 +626,66 @@ def test_github_request_handles_empty_response(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr("public_diary_tools.cli.requests.request", lambda *_args, **_kwargs: EmptyResponse())
 
     assert cli._github_request("DELETE", "/path") == {}  # noqa: SLF001
+
+
+def test_manifest_start_html_posts_manifest() -> None:
+    output = cli._manifest_start_html(  # noqa: SLF001
+        "/organizations/example/settings/apps/new",
+        '{"name":"A&B"}',
+    )
+
+    assert 'method="post"' in output
+    assert 'action="https://github.com/organizations/example/settings/apps/new"' in output
+    assert 'name="manifest"' in output
+    assert "{&quot;name&quot;:&quot;A&amp;B&quot;}" in output
+
+
+def test_manifest_callback_handler_serves_start_and_callback() -> None:
+    class FakeServer:
+        code = ""
+        github_create_path = "/settings/apps/new"
+        manifest_json = '{"name":"app"}'
+
+    class FakeHandler:
+        path = "/github-app-manifest-start"
+        server = FakeServer()
+        wfile = io.BytesIO()
+        responses: list[int] = []
+        headers: list[tuple[str, str]] = []
+
+        def send_response(self, status: int) -> None:
+            self.responses.append(status)
+
+        def send_header(self, name: str, value: str) -> None:
+            self.headers.append((name, value))
+
+        def end_headers(self) -> None:
+            return None
+
+    handler = FakeHandler()
+    cli._ManifestCallbackHandler.do_GET(handler)  # type: ignore[arg-type]  # noqa: SLF001
+
+    assert handler.responses == [200]
+    assert b"<form" in handler.wfile.getvalue()
+
+    handler.path = "/github-app-manifest-callback?code=abc"
+    handler.wfile = io.BytesIO()
+    cli._ManifestCallbackHandler.do_GET(handler)  # type: ignore[arg-type]  # noqa: SLF001
+
+    assert handler.server.code == "abc"
+    assert b"code received" in handler.wfile.getvalue()
+
+    handler.path = "/github-app-manifest-callback"
+    handler.wfile = io.BytesIO()
+    cli._ManifestCallbackHandler.do_GET(handler)  # type: ignore[arg-type]  # noqa: SLF001
+
+    assert handler.responses[-1] == 400
+    assert b"Missing" in handler.wfile.getvalue()
+
+
+def test_github_app_create_path() -> None:
+    assert cli._github_app_create_path("") == "/settings/apps/new"  # noqa: SLF001
+    assert cli._github_app_create_path("owner") == "/organizations/owner/settings/apps/new"  # noqa: SLF001
 
 
 def test_wait_for_manifest_code_accepts_pasted_url(monkeypatch: pytest.MonkeyPatch) -> None:

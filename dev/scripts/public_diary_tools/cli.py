@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import html
 import http.server
 import json
 import logging
@@ -13,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from string import Template
 from typing import Any, cast
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 import requests
 
@@ -519,13 +520,23 @@ def _github_app_manifest(repo: str, callback_url: str) -> dict[str, Any]:
 
 class _ManifestCallbackServer(http.server.HTTPServer):
     code = ""
+    github_create_path = "/settings/apps/new"
+    manifest_json = "{}"
 
 
 class _ManifestCallbackHandler(http.server.BaseHTTPRequestHandler):
     server: _ManifestCallbackServer
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib callback name.
-        query = parse_qs(urlparse(self.path).query)
+        parsed = urlparse(self.path)
+        if parsed.path == "/github-app-manifest-start":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(_manifest_start_html(self.server.github_create_path, self.server.manifest_json).encode())
+            return
+
+        query = parse_qs(parsed.query)
         code = query.get("code", [""])[0]
         if code:
             self.server.code = code
@@ -541,15 +552,42 @@ class _ManifestCallbackHandler(http.server.BaseHTTPRequestHandler):
         LOGGER.debug("github app callback request", extra={"args": args})
 
 
+def _github_app_create_path(owner: str) -> str:
+    return f"/organizations/{owner}/settings/apps/new" if owner else "/settings/apps/new"
+
+
+def _manifest_start_html(github_create_path: str, manifest_json: str) -> str:
+    action = html.escape(f"https://github.com{github_create_path}", quote=True)
+    manifest = html.escape(manifest_json, quote=True)
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Create GitHub App</title>
+  </head>
+  <body>
+    <form id="github-app-manifest" method="post" action="{action}">
+      <input type="hidden" name="manifest" value="{manifest}">
+      <button type="submit">Create GitHub App</button>
+    </form>
+    <script>
+      document.getElementById("github-app-manifest").submit();
+    </script>
+  </body>
+</html>
+"""
+
+
 def _wait_for_manifest_code(manifest: dict[str, Any], input_fn: Callable[[str], str] = input) -> str:
     with _ManifestCallbackServer(("127.0.0.1", 0), _ManifestCallbackHandler) as server:
         callback_url = f"http://127.0.0.1:{server.server_port}/github-app-manifest-callback"
         manifest["redirect_url"] = callback_url
         owner = os.environ.get("GITHUB_APP_OWNER", "")
-        owner_path = f"/organizations/{owner}/settings/apps/new" if owner else "/settings/apps/new"
-        manifest_url = f"https://github.com{owner_path}?manifest={quote(json.dumps(manifest, separators=(',', ':')))}"
-        print("Open this URL to create the GitHub App, then finish the GitHub prompts:")
-        print(manifest_url)
+        server.github_create_path = _github_app_create_path(owner)
+        server.manifest_json = json.dumps(manifest, separators=(",", ":"))
+        start_url = f"http://127.0.0.1:{server.server_port}/github-app-manifest-start"
+        print("Open this local URL to create the GitHub App, then finish the GitHub prompts:")
+        print(start_url)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
