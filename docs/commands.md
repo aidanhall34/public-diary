@@ -127,7 +127,7 @@ options:
 ```text
 usage: public-diary-tools upload-github-secrets [-h]
 
-Upload repository secrets such as DISCORD_WEBHOOK_URL.
+Upload GitHub repository secrets used by workflows.
 
 options:
   -h, --help  show this help message and exit
@@ -290,10 +290,12 @@ GitHub repository variables written by the tooling:
 - `GOOGLE_DRIVE_PATH`
 - `GOOGLE_WORKSPACE_USER`
 
-Discord failure notifications use the `DISCORD_WEBHOOK_URL` repository secret. Write the local file with
-`make python-tool ARGS="write-discord-webhook"`, then upload it with
-`make python-tool ARGS="upload-github-secrets"`. GitHub secrets are write-only through `gh`, so the tooling uploads the
-value but cannot read it back later.
+GitHub Pages first-run enablement uses the `PAGES_ADMIN_TOKEN` repository secret, which is uploaded from
+`gh auth token` by `make python-tool ARGS="upload-github-secrets"`. Discord failure notifications use the optional
+`DISCORD_WEBHOOK_URL` repository secret. Write the local Discord file with
+`make python-tool ARGS="write-discord-webhook"`, then upload both secrets with
+`make python-tool ARGS="upload-github-secrets"`. GitHub secrets are write-only through `gh`, so the tooling uploads
+values but cannot read them back later.
 
 Generate local `act` inputs with:
 
@@ -304,8 +306,8 @@ make python-tool ARGS="write-act-files"
 ```
 
 This writes `dev/act/vars.env`, `dev/act/secrets.env`, and `dev/act/google-drive-access-token`. These files are
-intentionally ignored by git. The secrets file includes a short-lived `GITHUB_TOKEN` from `gh auth token`, and includes
-`DISCORD_WEBHOOK_URL` and `GOOGLE_DRIVE_ACCESS_TOKEN` when their local files exist.
+intentionally ignored by git. The secrets file includes short-lived `GITHUB_TOKEN` and `PAGES_ADMIN_TOKEN` values from
+`gh auth token`, and includes `DISCORD_WEBHOOK_URL` and `GOOGLE_DRIVE_ACCESS_TOKEN` when their local files exist.
 
 `make python-tool ARGS="write-act-vars"` discovers the current `gcloud` project, lists accessible projects with a custom
 option when needed, prompts for missing values, ignores stale dummy values, and can list visible Shared Drives after

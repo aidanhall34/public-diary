@@ -31,7 +31,8 @@ Bootstrap the repository:
 make setup
 ```
 
-Authenticate to GitHub. The token must be able to manage repository Actions variables/secrets and run workflows:
+Authenticate to GitHub. The token must be able to manage repository Actions variables/secrets, enable Pages, and run
+workflows:
 
 ```sh
 gh auth login --scopes repo,workflow
@@ -168,17 +169,18 @@ This config requires the pull request validation `lint` and `test` checks before
 The preferred Google Drive layout is a Shared Drive with the deploy service account as a reader. If the vault must stay
 in a user's My Drive, configure Google Workspace domain-wide delegation separately and set `GOOGLE_WORKSPACE_USER`.
 
-## Discord Failure Notifications
+## GitHub Secrets
 
-The batch command handles Discord setup. To run only the Discord steps, create the local Discord webhook file and upload
-it as a GitHub repository secret:
+The batch command handles GitHub secret setup. To run only the secret steps, create the optional local Discord webhook
+file and upload secrets. The tool always uploads `PAGES_ADMIN_TOKEN` from `gh auth token`, and uploads
+`DISCORD_WEBHOOK_URL` when the webhook is configured:
 
 ```sh
 make python-tool ARGS="write-discord-webhook"
 make python-tool ARGS="upload-github-secrets"
 ```
 
-GitHub secrets are write-only through GitHub APIs, so the tool uploads the value but cannot read it back later.
+GitHub secrets are write-only through GitHub APIs, so the tool uploads values but cannot read them back later.
 
 ## Local act Files
 

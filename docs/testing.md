@@ -39,7 +39,7 @@ The test target writes local `act` input files and runs two dry runs:
 `make markdownlint` runs from the repository root and excludes generated or external directories through
 `.markdownlintignore`.
 
-To include Discord notification secrets in local `act` runs:
+To include GitHub Pages enablement and Discord notification secrets in local `act` runs:
 
 ```sh
 make python-tool ARGS="write-discord-webhook"
@@ -47,8 +47,8 @@ make python-tool ARGS="write-discord-webhook"
 make test
 ```
 
-`make test` reads `dev/act/discord-webhook-url` and writes it into the generated `dev/act/secrets.env` file. Both files
-are ignored by git.
+`make test` writes `PAGES_ADMIN_TOKEN` from `gh auth token`, reads `dev/act/discord-webhook-url` when present, and
+writes the generated `dev/act/secrets.env` file. The local secret files are ignored by git.
 
 ## Notes
 

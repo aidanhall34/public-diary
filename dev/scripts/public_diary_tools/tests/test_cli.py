@@ -30,6 +30,7 @@ def test_write_act_files_uses_local_secret_files(monkeypatch: pytest.MonkeyPatch
 
     assert read_env_file(secret_file) == {
         "GITHUB_TOKEN": "github-token",
+        "PAGES_ADMIN_TOKEN": "github-token",
         "DISCORD_WEBHOOK_URL": "https://discord.example",
         "GOOGLE_DRIVE_ACCESS_TOKEN": "drive-token",
     }
@@ -192,18 +193,34 @@ def test_upload_github_secrets_reads_file(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.setattr(cli, "github_token_from_gh", lambda: "token")
 
     assert cli.cmd_upload_github_secrets(None) == 0
-    assert calls == [("init", "owner/repo", "token"), ("DISCORD_WEBHOOK_URL", "https://discord.example")]
+    assert calls[0] == ("init", "owner/repo", "token")
+    assert sorted(calls[1:]) == [
+        ("DISCORD_WEBHOOK_URL", "https://discord.example"),
+        ("PAGES_ADMIN_TOKEN", "token"),
+    ]
 
 
-def test_upload_github_secrets_requires_webhook(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_upload_github_secrets_uploads_pages_token_without_webhook(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple[Any, ...]] = []
+
+    class FakeGithub:
+        def __init__(self, repo: str, token: str) -> None:
+            calls.append(("init", repo, token))
+
+        def set_secret(self, name: str, value: str) -> None:
+            calls.append((name, value))
+
     monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(tmp_path / "missing"))
     monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
-    try:
-        cli.cmd_upload_github_secrets(None)
-    except RuntimeError as exc:
-        assert "DISCORD_WEBHOOK_URL" in str(exc)
-    else:  # pragma: no cover
-        raise AssertionError("expected RuntimeError")
+    monkeypatch.setattr(cli, "GithubClient", FakeGithub)
+    monkeypatch.setattr(cli, "repository_from_gh", lambda: "owner/repo")
+    monkeypatch.setattr(cli, "github_token_from_gh", lambda: "token")
+
+    assert cli.cmd_upload_github_secrets(None) == 0
+    assert calls == [("init", "owner/repo", "token"), ("PAGES_ADMIN_TOKEN", "token")]
 
 
 def test_apply_github_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -509,7 +526,9 @@ def test_provision_all_batches_independent_work(monkeypatch: pytest.MonkeyPatch,
 
     assert read_env_file(var_file)["GCP_SERVICE_ACCOUNT"] == "svc@proj.iam.gserviceaccount.com"
     assert read_env_file(secret_file)["DISCORD_WEBHOOK_URL"] == "https://discord.example"
+    assert read_env_file(secret_file)["PAGES_ADMIN_TOKEN"] == "token"
     assert ("secret", "DISCORD_WEBHOOK_URL", "https://discord.example") in calls
+    assert ("secret", "PAGES_ADMIN_TOKEN", "token") in calls
     assert ("drive", "drive-id", "svc@proj.iam.gserviceaccount.com", "reader") in calls
 
 
