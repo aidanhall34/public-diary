@@ -39,7 +39,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: true
 
@@ -71,7 +71,8 @@ jobs:
         env:
           GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ vars.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
           GOOGLE_DRIVE_SHARED_DRIVE_ID: ${{ vars.GOOGLE_DRIVE_SHARED_DRIVE_ID }}
-          GOOGLE_DRIVE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token || secrets.GOOGLE_DRIVE_ACCESS_TOKEN }}
+          GOOGLE_DRIVE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token ||
+            secrets.GOOGLE_DRIVE_ACCESS_TOKEN }}
         run: |
           mkdir -p ~/.config/rclone
           cat > ~/.config/rclone/rclone.conf <<EOF
@@ -119,8 +120,8 @@ jobs:
       - name: Commit synced vault changes
         if: >-
           steps.vault-changes.outputs.should_publish == 'true' &&
-          steps.vault-changes.outputs.vault_changed == 'true' &&
-          env.ACT != 'true'
+          steps.vault-changes.outputs.vault_changed == 'true' && env.ACT !=
+          'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -154,14 +155,15 @@ jobs:
     needs:
       - build
       - deploy
-    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    if: ${{ always() && (contains(needs.*.result, 'failure') ||
+      contains(needs.*.result, 'cancelled')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: true
 
