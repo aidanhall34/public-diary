@@ -2,6 +2,8 @@
 
 ![Test coverage](docs/images/coverage.svg)
 
+[![Build status](https://github.com/aidanhall34/public-diary/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/aidanhall34/public-diary/actions/workflows/deploy-pages.yml)
+
 This repository turns an Obsidian vault into a static Quartz site and deploys it to GitHub Pages.
 
 The source notes are stored outside the repository in Google Drive. The deployment workflow authenticates to Google

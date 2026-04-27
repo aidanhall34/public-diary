@@ -217,7 +217,7 @@ options:
 ```text
 usage: public-diary-tools notify-discord [-h]
 
-Send a Discord failure notification for GitHub Actions.
+Send a Discord notification for a GitHub Actions workflow result.
 
 options:
   -h, --help  show this help message and exit
@@ -248,7 +248,7 @@ Regenerate this command list from Python help strings with:
 make docs-commands
 ```
 
-Apply repository and branch protection settings from `.github/config/repository-permissions.json` with:
+Apply repository, GitHub Pages, and branch protection settings from `.github/config/repository-permissions.json` with:
 
 ```sh
 make python-tool ARGS="apply-github-settings"
@@ -275,7 +275,8 @@ gcloud auth application-default login \
 ```
 
 `make python-tool ARGS="provision-all"` discovers Drive values and provisions Google Cloud, Workload Identity
-Federation, GitHub repository settings, Discord notifications, Drive access, and local `act` files in one flow.
+Federation, GitHub repository and Pages settings, Discord notifications, Drive access, and local `act` files in one
+flow.
 
 `make python-tool ARGS="provision-auth"` enables the required Google Cloud APIs, creates or reuses the deploy service
 account, configures Workload Identity Federation for this repository, grants token creation permissions needed by GitHub

@@ -16,9 +16,11 @@ The site is built with Quartz and deployed to GitHub Pages from GitHub Actions.
 4. Mint a short-lived Google Drive read-only token with GitHub OIDC and Workload Identity Federation.
 5. Install `rclone`.
 6. Build a temporary `rclone` config that uses the Drive read-only token.
-7. Run `make build`.
-8. Upload `quartz/public` as the Pages artifact.
-9. Deploy the artifact to GitHub Pages.
+7. Sync Drive into `vault/`.
+8. Run `make quartz-build`.
+9. Commit any resulting `vault/` changes back to the workflow branch.
+10. Upload `quartz/public` as the Pages artifact.
+11. Deploy the artifact to GitHub Pages.
 
 ## Local preview
 
@@ -120,11 +122,20 @@ make build
 The underlying clone step runs:
 
 ```sh
-rclone copy "vault:${GOOGLE_DRIVE_PATH}" vault/ --drive-skip-gdocs --create-empty-src-dirs --log-level INFO --exclude ".obsidian/**"
+rclone sync "vault:${GOOGLE_DRIVE_PATH}" vault/ \
+  --drive-skip-gdocs \
+  --create-empty-src-dirs \
+  --log-level INFO \
+  --exclude ".obsidian/**" \
+  --exclude ".trash/**"
 ```
 
 Because the Google Drive remote is the source and the local workspace is the destination, the command reads from Drive
-and writes only to local disk.
+and writes only to local disk. `sync` also removes local files that no longer exist in Drive, which prevents renamed or
+moved notes from being published twice under stale paths.
+
+When the CI sync changes `vault/`, the deploy workflow commits those changes back to the workflow branch before
+uploading the Pages artifact.
 
 Unlike your personal sync script, this repository does not use `rclone bisync`.
 

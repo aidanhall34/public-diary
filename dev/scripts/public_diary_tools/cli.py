@@ -474,8 +474,31 @@ def _format_duration(started_at: str) -> str:
     return f"{seconds}s"
 
 
+def _status_values_from_job_results(job_results: str) -> list[str]:
+    values: list[str] = []
+    for item in job_results.split(","):
+        if "=" not in item:
+            continue
+        _, value = item.rsplit("=", 1)
+        value = value.strip().lower()
+        if value:
+            values.append(value)
+    return values
+
+
+def _workflow_status_from_job_results(job_results: str) -> tuple[str, int, str]:
+    statuses = _status_values_from_job_results(job_results)
+    if "failure" in statuses:
+        return ("failed", 15158332, "failure")
+    if "cancelled" in statuses:
+        return ("cancelled", 16753920, "cancelled")
+    if statuses and all(status in {"success", "skipped"} for status in statuses):
+        return ("succeeded", 3066993, "success")
+    return ("completed", 3447003, "completion")
+
+
 def cmd_notify_discord(_: argparse.Namespace | None) -> int:
-    """Send a Discord failure notification for GitHub Actions."""
+    """Send a Discord notification for a GitHub Actions workflow result."""
     webhook = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook:
         raise RuntimeError("DISCORD_WEBHOOK_URL is required.")
@@ -484,12 +507,14 @@ def cmd_notify_discord(_: argparse.Namespace | None) -> int:
     run_id = os.environ["GITHUB_RUN_ID"]
     run_url = f"{server}/{repo}/actions/runs/{run_id}"
     sha = os.environ.get("GITHUB_SHA", "")
+    job_results = os.environ.get("DISCORD_JOB_RESULTS", "unknown")
+    status, color, notification_kind = _workflow_status_from_job_results(job_results)
     payload = {
         "username": "GitHub Actions",
         "embeds": [
             {
-                "title": f"Workflow failed: {os.environ.get('GITHUB_WORKFLOW', 'unknown workflow')}",
-                "color": 15158332,
+                "title": f"Workflow {status}: {os.environ.get('GITHUB_WORKFLOW', 'unknown workflow')}",
+                "color": color,
                 "fields": [
                     {
                         "name": "Duration",
@@ -509,14 +534,14 @@ def cmd_notify_discord(_: argparse.Namespace | None) -> int:
                     },
                     {"name": "Ref", "value": os.environ.get("GITHUB_REF_NAME", "unknown"), "inline": True},
                     {"name": "Actor", "value": os.environ.get("GITHUB_ACTOR", "unknown"), "inline": True},
-                    {"name": "Job results", "value": os.environ.get("DISCORD_JOB_RESULTS", "unknown"), "inline": False},
+                    {"name": "Job results", "value": job_results, "inline": False},
                 ],
             }
         ],
     }
     with track_web_request():
         requests.post(webhook, json=payload, timeout=10).raise_for_status()
-    print("Discord failure notification sent.")
+    print(f"Discord {notification_kind} notification sent.")
     return 0
 
 

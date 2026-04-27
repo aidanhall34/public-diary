@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 from public_diary_tools.github_settings import (
+    GitHubNotFoundError,
     GitHubSettingsClient,
     apply_github_settings,
     load_github_settings,
@@ -24,6 +25,12 @@ class FakeGitHub:
 
     def patch_repository(self, settings: dict[str, Any]) -> None:
         self.calls.append(("repo", "", settings))
+
+    def create_pages(self, settings: dict[str, Any]) -> None:
+        self.calls.append(("create-pages", "", settings))
+
+    def update_pages(self, settings: dict[str, Any]) -> None:
+        self.calls.append(("pages", "", settings))
 
     def put_branch_protection(self, branch: str, settings: dict[str, Any]) -> None:
         self.calls.append(("branch", branch, settings))
@@ -53,17 +60,20 @@ def test_apply_github_settings() -> None:
     client = FakeGitHub()
     settings = {
         "repository": {"delete_branch_on_merge": True},
+        "pages": {"build_type": "workflow", "cname": "notes.ah34.net", "https_enforced": True},
         "branches": {"main": {"enforce_admins": True}},
         "rulesets": [{"name": "main pull request reviews"}],
     }
 
     assert apply_github_settings(settings, client) == [
         "repository",
+        "pages",
         "branch:main",
         "ruleset:main pull request reviews",
     ]
     assert client.calls == [
         ("repo", "", {"delete_branch_on_merge": True}),
+        ("pages", "", {"build_type": "workflow", "cname": "notes.ah34.net", "https_enforced": True}),
         ("branch", "main", {"enforce_admins": True}),
         ("rulesets", "", {}),
         ("create-ruleset", "", {"name": "main pull request reviews"}),
@@ -132,6 +142,8 @@ def test_github_settings_client_requests(monkeypatch: pytest.MonkeyPatch) -> Non
         base_url="https://api.example.test",
     )
     client.patch_repository({"delete_branch_on_merge": True})
+    client.create_pages({"build_type": "workflow"})
+    client.update_pages({"build_type": "workflow", "cname": "notes.ah34.net", "https_enforced": True})
     client.put_branch_protection("main", {"enforce_admins": True})
     assert client.list_rulesets() == [{"id": 42, "name": "main pull request reviews"}]
     client.create_ruleset({"name": "new ruleset"})
@@ -150,6 +162,30 @@ def test_github_settings_client_requests(monkeypatch: pytest.MonkeyPatch) -> Non
                 "X-GitHub-Api-Version": "2022-11-28",
             },
             {"delete_branch_on_merge": True},
+            30,
+        ),
+        ("raise_for_status",),
+        (
+            "POST",
+            "https://api.example.test/repos/owner/repo/pages",
+            {
+                "Accept": "application/vnd.github+json",
+                "Authorization": "Bearer github-token",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            {"build_type": "workflow"},
+            30,
+        ),
+        ("raise_for_status",),
+        (
+            "PUT",
+            "https://api.example.test/repos/owner/repo/pages",
+            {
+                "Accept": "application/vnd.github+json",
+                "Authorization": "Bearer github-token",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            {"build_type": "workflow", "cname": "notes.ah34.net", "https_enforced": True},
             30,
         ),
         ("raise_for_status",),
@@ -240,6 +276,31 @@ def test_github_settings_client_requests(monkeypatch: pytest.MonkeyPatch) -> Non
     ]
 
 
+def test_github_settings_client_creates_pages_site_before_update(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    client = GitHubSettingsClient(
+        repository="owner/repo",
+        token="github-token",
+        base_url="https://api.example.test",
+    )
+
+    def fake_request(method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        calls.append((method, path, payload))
+        if calls == [("PUT", "/pages", {"cname": "notes.ah34.net", "https_enforced": True})]:
+            raise GitHubNotFoundError("missing pages site")
+        return {}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    client.update_pages({"cname": "notes.ah34.net", "https_enforced": True})
+
+    assert calls == [
+        ("PUT", "/pages", {"cname": "notes.ah34.net", "https_enforced": True}),
+        ("POST", "/pages", {"build_type": "workflow"}),
+        ("PUT", "/pages", {"cname": "notes.ah34.net", "https_enforced": True}),
+    ]
+
+
 def test_apply_github_settings_rejects_invalid_shapes() -> None:
     client = FakeGitHub()
     with pytest.raises(TypeError, match="repository"):
@@ -247,6 +308,9 @@ def test_apply_github_settings_rejects_invalid_shapes() -> None:
 
     with pytest.raises(TypeError, match="branches"):
         apply_github_settings({"branches": []}, client)
+
+    with pytest.raises(TypeError, match="pages"):
+        apply_github_settings({"pages": []}, client)
 
     with pytest.raises(TypeError, match="branch protection"):
         apply_github_settings({"branches": {"main": []}}, client)
