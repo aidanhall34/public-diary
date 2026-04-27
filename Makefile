@@ -14,7 +14,7 @@ include dev/makefiles/provisioning.mk
 
 setup: repo-setup quartz-bootstrap quartz-deps quartz-configure
 
-pre-commit: lint docs-commands coverage-badge docs-readme-sync docs-generated-check
+pre-commit: pytests lint docs-commands coverage-badge docs-readme-sync docs-generated-check
 
 lint: ruff mypy yamllint jsonlint checkmake markdownlint
 
