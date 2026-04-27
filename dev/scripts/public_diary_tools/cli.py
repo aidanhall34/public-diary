@@ -34,6 +34,7 @@ from public_diary_tools.github_settings import (
 )
 from public_diary_tools.json_tools import check_json_configs, format_json_configs
 from public_diary_tools.paths import act_secret_file, act_var_file, discord_webhook_file, google_drive_token_file
+from public_diary_tools.progress import track_web_request, web_request_progress
 
 REQUIRED_APIS = [
     "drive.googleapis.com",
@@ -481,7 +482,8 @@ def cmd_notify_discord(_: argparse.Namespace | None) -> int:
             }
         ],
     }
-    requests.post(webhook, json=payload, timeout=10).raise_for_status()
+    with track_web_request():
+        requests.post(webhook, json=payload, timeout=10).raise_for_status()
     print("Discord failure notification sent.")
     return 0
 
@@ -599,7 +601,10 @@ def main(argv: list[str] | None = None) -> int:
         _configure_logging(log_level, log_output)
         LOGGER.debug("configured logging")
         func = cast(Callable[[argparse.Namespace], int], args.func)
-        return func(args)
+        if os.environ.get("PUBLIC_DIARY_WEB_PROGRESS", "1").lower() in {"0", "false", "no"}:
+            return func(args)
+        with web_request_progress():
+            return func(args)
     except KeyboardInterrupt:
         print("Cancelled by user.", file=sys.stderr)
         return 130

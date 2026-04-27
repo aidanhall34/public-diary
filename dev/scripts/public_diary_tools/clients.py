@@ -15,6 +15,8 @@ from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.discovery import build
 
+from public_diary_tools.progress import add_web_requests, track_web_request
+
 DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
@@ -52,6 +54,16 @@ def credentials_from_token(token: str) -> Credentials:
     return Credentials(token=token)  # type: ignore[no-untyped-call]
 
 
+def _execute(request: Any, *, planned: bool = True) -> Any:
+    with track_web_request(planned=planned):
+        return request.execute()
+
+
+def _call_web(function: Any, *args: Any, planned: bool = True, **kwargs: Any) -> Any:
+    with track_web_request(planned=planned):
+        return function(*args, **kwargs)
+
+
 @dataclass
 class GoogleApis:
     token: str | None = None
@@ -65,55 +77,60 @@ class GoogleApis:
 
     def list_projects(self) -> list[str]:
         service = self.service("cloudresourcemanager", "v1")
-        response = service.projects().list().execute()
+        response = _execute(service.projects().list())
         return [project["projectId"] for project in response.get("projects", [])]
 
     def create_project(self, project_id: str, name: str) -> None:
         service = self.service("cloudresourcemanager", "v1")
-        service.projects().create(body={"projectId": project_id, "name": name}).execute()
+        _execute(service.projects().create(body={"projectId": project_id, "name": name}))
 
     def project_number(self, project_id: str) -> str:
         service = self.service("cloudresourcemanager", "v1")
-        response = service.projects().get(projectId=project_id).execute()
+        response = _execute(service.projects().get(projectId=project_id))
         return str(response["projectNumber"])
 
     def enable_services(self, project_id: str, services: list[str]) -> None:
         service = self.service("serviceusage", "v1")
+        add_web_requests(len(services))
         for api_name in services:
             LOGGER.debug("enabling google api %s for project %s", api_name, project_id)
-            service.services().enable(name=f"projects/{project_id}/services/{api_name}").execute()
+            _execute(service.services().enable(name=f"projects/{project_id}/services/{api_name}"), planned=False)
 
     def service_account_exists(self, project_id: str, email: str) -> bool:
         service = self.service("iam", "v1")
         try:
-            service.projects().serviceAccounts().get(name=f"projects/{project_id}/serviceAccounts/{email}").execute()
+            _execute(service.projects().serviceAccounts().get(name=f"projects/{project_id}/serviceAccounts/{email}"))
         except Exception:  # noqa: BLE001 - Google client raises varied HTTP exceptions.
             return False
         return True
 
     def create_service_account(self, project_id: str, account_id: str, display_name: str) -> None:
         service = self.service("iam", "v1")
-        service.projects().serviceAccounts().create(
-            name=f"projects/{project_id}",
-            body={"accountId": account_id, "serviceAccount": {"displayName": display_name}},
-        ).execute()
+        _execute(
+            service.projects().serviceAccounts().create(
+                name=f"projects/{project_id}",
+                body={"accountId": account_id, "serviceAccount": {"displayName": display_name}},
+            ),
+        )
 
     def workload_identity_pool_exists(self, project_number: str, pool_id: str) -> bool:
         service = self.service("iam", "v1")
         name = f"projects/{project_number}/locations/global/workloadIdentityPools/{pool_id}"
         try:
-            service.projects().locations().workloadIdentityPools().get(name=name).execute()
+            _execute(service.projects().locations().workloadIdentityPools().get(name=name))
         except Exception:  # noqa: BLE001 - Google client raises varied HTTP exceptions.
             return False
         return True
 
     def create_workload_identity_pool(self, project_number: str, pool_id: str, display_name: str) -> None:
         service = self.service("iam", "v1")
-        service.projects().locations().workloadIdentityPools().create(
-            parent=f"projects/{project_number}/locations/global",
-            workloadIdentityPoolId=pool_id,
-            body={"displayName": display_name},
-        ).execute()
+        _execute(
+            service.projects().locations().workloadIdentityPools().create(
+                parent=f"projects/{project_number}/locations/global",
+                workloadIdentityPoolId=pool_id,
+                body={"displayName": display_name},
+            ),
+        )
 
     def workload_identity_provider_exists(self, project_number: str, pool_id: str, provider_id: str) -> bool:
         service = self.service("iam", "v1")
@@ -121,7 +138,7 @@ class GoogleApis:
             f"projects/{project_number}/locations/global/workloadIdentityPools/{pool_id}/providers/{provider_id}"
         )
         try:
-            service.projects().locations().workloadIdentityPools().providers().get(name=name).execute()
+            _execute(service.projects().locations().workloadIdentityPools().providers().get(name=name))
         except Exception:  # noqa: BLE001 - Google client raises varied HTTP exceptions.
             return False
         return True
@@ -135,26 +152,33 @@ class GoogleApis:
         display_name: str,
     ) -> None:
         service = self.service("iam", "v1")
-        service.projects().locations().workloadIdentityPools().providers().create(
-            parent=f"projects/{project_number}/locations/global/workloadIdentityPools/{pool_id}",
-            workloadIdentityPoolProviderId=provider_id,
-            body={
-                "displayName": display_name,
-                "attributeMapping": {
-                    "google.subject": "assertion.sub",
-                    "attribute.repository": "assertion.repository",
-                    "attribute.repository_owner": "assertion.repository_owner",
+        _execute(
+            service.projects()
+            .locations()
+            .workloadIdentityPools()
+            .providers()
+            .create(
+                parent=f"projects/{project_number}/locations/global/workloadIdentityPools/{pool_id}",
+                workloadIdentityPoolProviderId=provider_id,
+                body={
+                    "displayName": display_name,
+                    "attributeMapping": {
+                        "google.subject": "assertion.sub",
+                        "attribute.repository": "assertion.repository",
+                        "attribute.repository_owner": "assertion.repository_owner",
+                    },
+                    "attributeCondition": f"assertion.repository=='{repo}'",
+                    "oidc": {"issuerUri": "https://token.actions.githubusercontent.com"},
                 },
-                "attributeCondition": f"assertion.repository=='{repo}'",
-                "oidc": {"issuerUri": "https://token.actions.githubusercontent.com"},
-            },
-        ).execute()
+            ),
+        )
 
     def add_service_account_binding(self, project_id: str, email: str, role: str, member: str) -> None:
         LOGGER.debug("adding service account binding role=%s member=%s", role, member)
         service = self.service("iam", "v1")
         resource = f"projects/{project_id}/serviceAccounts/{email}"
-        policy = service.projects().serviceAccounts().getIamPolicy(resource=resource).execute()
+        add_web_requests(2)
+        policy = _execute(service.projects().serviceAccounts().getIamPolicy(resource=resource), planned=False)
         bindings = policy.setdefault("bindings", [])
         for binding in bindings:
             if binding["role"] == role:
@@ -164,7 +188,10 @@ class GoogleApis:
                 break
         else:
             bindings.append({"role": role, "members": [member]})
-        service.projects().serviceAccounts().setIamPolicy(resource=resource, body={"policy": policy}).execute()
+        _execute(
+            service.projects().serviceAccounts().setIamPolicy(resource=resource, body={"policy": policy}),
+            planned=False,
+        )
 
     def list_shared_drives(self) -> list[tuple[str, str]]:
         LOGGER.debug("listing shared drives")
@@ -172,10 +199,8 @@ class GoogleApis:
         drives: list[tuple[str, str]] = []
         page_token = None
         while True:
-            response = (
-                service.drives()
-                .list(pageSize=100, pageToken=page_token, fields="drives(id,name),nextPageToken")
-                .execute()
+            response = _execute(
+                service.drives().list(pageSize=100, pageToken=page_token, fields="drives(id,name),nextPageToken"),
             )
             drives.extend((drive["id"], drive["name"]) for drive in response.get("drives", []))
             page_token = response.get("nextPageToken")
@@ -184,9 +209,8 @@ class GoogleApis:
 
     def list_my_drive_top_level_folders(self) -> list[tuple[str, str]]:
         service = self.service("drive", "v3")
-        response = (
-            service.files()
-            .list(
+        response = _execute(
+            service.files().list(
                 corpora="user",
                 pageSize=100,
                 fields="files(id,name)",
@@ -195,8 +219,7 @@ class GoogleApis:
                     "and mimeType = 'application/vnd.google-apps.folder' "
                     "and trashed = false"
                 ),
-            )
-            .execute()
+            ),
         )
         return [(folder["id"], folder["name"]) for folder in response.get("files", [])]
 
@@ -221,24 +244,19 @@ class GoogleApis:
                     "supportsAllDrives": True,
                 },
             )
-        response = service.files().list(**request).execute()
+        response = _execute(service.files().list(**request))
         return [(folder["id"], folder["name"]) for folder in response.get("files", [])]
 
     def folder_info(self, folder_id: str) -> tuple[str, str]:
         service = self.service("drive", "v3")
-        response = (
-            service.files()
-            .get(fileId=folder_id, supportsAllDrives=True, fields="id,name,parents")
-            .execute()
-        )
+        response = _execute(service.files().get(fileId=folder_id, supportsAllDrives=True, fields="id,name,parents"))
         parents = response.get("parents", [])
         return str(response.get("name", folder_id)), str(parents[0]) if parents else ""
 
     def list_top_level_folders(self, shared_drive_id: str) -> list[tuple[str, str]]:
         service = self.service("drive", "v3")
-        response = (
-            service.files()
-            .list(
+        response = _execute(
+            service.files().list(
                 corpora="drive",
                 driveId=shared_drive_id,
                 includeItemsFromAllDrives=True,
@@ -250,8 +268,7 @@ class GoogleApis:
                     "and mimeType = 'application/vnd.google-apps.folder' "
                     "and trashed = false"
                 ),
-            )
-            .execute()
+            ),
         )
         return [(folder["id"], folder["name"]) for folder in response.get("files", [])]
 
@@ -259,15 +276,15 @@ class GoogleApis:
         service = self.service("drive", "v3")
         return cast(
             dict[str, str],
-            service.permissions()
-            .create(
-                fileId=target_id,
-                supportsAllDrives=True,
-                sendNotificationEmail=False,
-                fields="id,type,role,emailAddress",
-                body={"type": "user", "role": role, "emailAddress": email},
-            )
-            .execute(),
+            _execute(
+                service.permissions().create(
+                    fileId=target_id,
+                    supportsAllDrives=True,
+                    sendNotificationEmail=False,
+                    fields="id,type,role,emailAddress",
+                    body={"type": "user", "role": role, "emailAddress": email},
+                ),
+            ),
         )
 
 
@@ -285,30 +302,34 @@ class GithubClient:
         if not value:
             self.delete_variable(name)
             return
+        add_web_requests(2)
         try:
-            variable = self.repo.get_variable(name)
-            variable.edit(value)
+            variable = _call_web(self.repo.get_variable, name, planned=False)
+            _call_web(variable.edit, value, planned=False)
         except Exception:  # noqa: BLE001 - PyGithub raises UnknownObjectException for missing vars.
-            self.repo.create_variable(name, value)
+            _call_web(self.repo.create_variable, name, value, planned=False)
 
     def delete_variable(self, name: str) -> None:
+        add_web_requests(1)
         try:
-            variable = self.repo.get_variable(name)
+            variable = _call_web(self.repo.get_variable, name, planned=False)
         except Exception:  # noqa: BLE001 - Missing optional empty variables are already in the desired state.
             LOGGER.debug("github variable %s is already absent", name)
             return
         delete = getattr(variable, "delete", None)
         if callable(delete):
-            delete()
+            add_web_requests(1)
+            _call_web(delete, planned=False)
             return
         repo_delete = getattr(self.repo, "delete_variable", None)
         if callable(repo_delete):
-            repo_delete(name)
+            add_web_requests(1)
+            _call_web(repo_delete, name, planned=False)
             return
         raise RuntimeError(f"PyGithub does not expose a delete operation for variable {name}.")
 
     def set_secret(self, name: str, value: str) -> None:
-        self.repo.create_secret(name, value)
+        _call_web(self.repo.create_secret, name, value)
 
 
 def gcloud_fallback_error(name: str) -> str:
@@ -331,7 +352,8 @@ def token_from_service_account_key(path: Path, scopes: list[str]) -> str:
         ServiceAccountCredentials,
         ServiceAccountCredentials.from_service_account_file(str(path), scopes=scopes),  # type: ignore[no-untyped-call]
     )
-    credentials.refresh(google.auth.transport.requests.Request())  # type: ignore[no-untyped-call]
+    with track_web_request():
+        credentials.refresh(google.auth.transport.requests.Request())  # type: ignore[no-untyped-call]
     if not credentials.token:
         raise RuntimeError("Service account token refresh did not return a token")
     return str(credentials.token)
