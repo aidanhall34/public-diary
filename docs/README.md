@@ -2,7 +2,7 @@
 
 ![Test coverage](docs/images/coverage.svg)
 
-[![Build status](https://github.com/aidanhall34/public-diary/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/aidanhall34/public-diary/actions/workflows/deploy-pages.yml)
+[![Build status](https://github.com/aidanhall34/public-diary/workflows/Deploy%20Quartz%20site%20to%20GitHub%20Pages/badge.svg?branch=main)](https://github.com/aidanhall34/public-diary/actions/workflows/deploy-pages.yml?query=branch%3Amain)
 
 This repository turns an Obsidian vault into a static Quartz site and deploys it to GitHub Pages.
 
