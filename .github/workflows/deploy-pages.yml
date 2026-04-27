@@ -36,6 +36,7 @@ jobs:
           fetch-depth: 0
 
       - name: Configure GitHub Pages
+        if: ${{ env.ACT != 'true' }}
         uses: actions/configure-pages@v5
 
       - name: Install uv
