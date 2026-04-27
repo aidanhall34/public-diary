@@ -318,7 +318,7 @@ GitHub repository variables written by the tooling:
 
 GitHub workflow authentication uses a GitHub App installation token minted by `actions/create-github-app-token`.
 Create and install the app with `make python-tool ARGS="provision-github-app"`. The tool uploads
-`GITHUB_APP_CLIENT_ID` and `GITHUB_APP_PRIVATE_KEY` to repository secrets and writes a local ignored
+`PUBLIC_DIARY_APP_CLIENT_ID` and `PUBLIC_DIARY_APP_PRIVATE_KEY` to repository secrets and writes a local ignored
 `dev/act/github-app.env` source file for `act`.
 
 Set these GitHub App repository permissions:
@@ -348,9 +348,9 @@ make python-tool ARGS="write-act-files"
 ```
 
 This writes `dev/act/vars.env`, `dev/act/secrets.env`, and `dev/act/google-drive-access-token`. These files are
-intentionally ignored by git. The secrets file includes `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_PRIVATE_KEY` from
-`dev/act/github-app.env` or the matching environment variables, and includes `DISCORD_WEBHOOK_URL` and
-`GOOGLE_DRIVE_ACCESS_TOKEN` when their local files exist.
+intentionally ignored by git. The secrets file includes `PUBLIC_DIARY_APP_CLIENT_ID` and
+`PUBLIC_DIARY_APP_PRIVATE_KEY` from `dev/act/github-app.env` or the matching environment variables, and includes
+`DISCORD_WEBHOOK_URL` and `GOOGLE_DRIVE_ACCESS_TOKEN` when their local files exist.
 
 `make python-tool ARGS="write-act-vars"` discovers the current `gcloud` project, lists accessible projects with a custom
 option when needed, prompts for missing values, ignores stale dummy values, and can list visible Shared Drives after

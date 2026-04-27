@@ -93,8 +93,8 @@ No long-lived Google credential secret is required for the preferred setup.
 
 Set these repository secrets:
 
-- `GITHUB_APP_CLIENT_ID`
-- `GITHUB_APP_PRIVATE_KEY`
+- `PUBLIC_DIARY_APP_CLIENT_ID`
+- `PUBLIC_DIARY_APP_PRIVATE_KEY`
 - `DISCORD_WEBHOOK_URL` when Discord notifications are enabled
 
 ## Runtime credentials

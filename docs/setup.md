@@ -183,7 +183,7 @@ make python-tool ARGS="provision-github-app"
 The command prints a local `127.0.0.1` start URL. Open that URL in your browser; it serves a small form that posts the
 manifest to GitHub and starts a local callback listener. After GitHub creates the app, it redirects back to the local
 callback with a temporary code. The tool converts that code into an app private key, prompts you to install the app,
-uploads `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_PRIVATE_KEY` to repository secrets, and writes `dev/act/github-app.env`
+uploads `PUBLIC_DIARY_APP_CLIENT_ID` and `PUBLIC_DIARY_APP_PRIVATE_KEY` to repository secrets, and writes `dev/act/github-app.env`
 for local `act` runs.
 
 Set these GitHub App repository permissions:

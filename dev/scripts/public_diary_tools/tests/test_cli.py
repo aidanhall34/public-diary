@@ -26,14 +26,14 @@ def test_write_act_files_uses_local_secret_files(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("ACT_SECRET_FILE", str(secret_file))
     monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(webhook_file))
     monkeypatch.setenv("GOOGLE_DRIVE_TOKEN_FILE", str(token_file))
-    monkeypatch.setenv("GITHUB_APP_CLIENT_ID", "client-id")
-    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "private-key")
+    monkeypatch.setenv("PUBLIC_DIARY_APP_CLIENT_ID", "client-id")
+    monkeypatch.setenv("PUBLIC_DIARY_APP_PRIVATE_KEY", "private-key")
 
     assert cli.cmd_write_act_files(None) == 0
 
     assert read_env_file(secret_file) == {
-        "GITHUB_APP_CLIENT_ID": "client-id",
-        "GITHUB_APP_PRIVATE_KEY": "private-key",
+        "PUBLIC_DIARY_APP_CLIENT_ID": "client-id",
+        "PUBLIC_DIARY_APP_PRIVATE_KEY": "private-key",
         "DISCORD_WEBHOOK_URL": "https://discord.example",
         "GOOGLE_DRIVE_ACCESS_TOKEN": "drive-token",
     }
@@ -216,7 +216,7 @@ def test_upload_github_secrets_reads_file(monkeypatch: pytest.MonkeyPatch, tmp_p
     path = tmp_path / "webhook"
     app_file = tmp_path / "github-app.env"
     path.write_text("https://discord.example\n")
-    write_env_file(app_file, {"GITHUB_APP_CLIENT_ID": "client-id", "GITHUB_APP_PRIVATE_KEY": "private-key"})
+    write_env_file(app_file, {"PUBLIC_DIARY_APP_CLIENT_ID": "client-id", "PUBLIC_DIARY_APP_PRIVATE_KEY": "private-key"})
     calls: list[tuple[Any, ...]] = []
 
     class FakeGithub:
@@ -237,9 +237,43 @@ def test_upload_github_secrets_reads_file(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert calls[0] == ("init", "owner/repo", "token")
     assert sorted(calls[1:]) == [
         ("DISCORD_WEBHOOK_URL", "https://discord.example"),
-        ("GITHUB_APP_CLIENT_ID", "client-id"),
-        ("GITHUB_APP_PRIVATE_KEY", "private-key"),
+        ("PUBLIC_DIARY_APP_CLIENT_ID", "client-id"),
+        ("PUBLIC_DIARY_APP_PRIVATE_KEY", "private-key"),
     ]
+
+
+def test_github_app_values_reads_legacy_local_names(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    app_file = tmp_path / "github-app.env"
+    write_env_file(app_file, {"GITHUB_APP_CLIENT_ID": "legacy-client", "GITHUB_APP_PRIVATE_KEY": "legacy-key"})
+    monkeypatch.setenv("GITHUB_APP_FILE", str(app_file))
+    monkeypatch.delenv("PUBLIC_DIARY_APP_CLIENT_ID", raising=False)
+    monkeypatch.delenv("PUBLIC_DIARY_APP_PRIVATE_KEY", raising=False)
+
+    assert cli._github_app_values(required=True) == {  # noqa: SLF001
+        "PUBLIC_DIARY_APP_CLIENT_ID": "legacy-client",
+        "PUBLIC_DIARY_APP_PRIVATE_KEY": "legacy-key",
+    }
+
+
+def test_github_app_values_prefers_current_names(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    app_file = tmp_path / "github-app.env"
+    write_env_file(
+        app_file,
+        {
+            "GITHUB_APP_CLIENT_ID": "legacy-client",
+            "GITHUB_APP_PRIVATE_KEY": "legacy-key",
+            "PUBLIC_DIARY_APP_CLIENT_ID": "file-client",
+            "PUBLIC_DIARY_APP_PRIVATE_KEY": "file-key",
+        },
+    )
+    monkeypatch.setenv("GITHUB_APP_FILE", str(app_file))
+    monkeypatch.setenv("PUBLIC_DIARY_APP_CLIENT_ID", "env-client")
+    monkeypatch.setenv("PUBLIC_DIARY_APP_PRIVATE_KEY", "env-key")
+
+    assert cli._github_app_values(required=True) == {  # noqa: SLF001
+        "PUBLIC_DIARY_APP_CLIENT_ID": "env-client",
+        "PUBLIC_DIARY_APP_PRIVATE_KEY": "env-key",
+    }
 
 
 def test_upload_github_secrets_requires_github_app(
@@ -557,12 +591,12 @@ def test_provision_github_app_writes_and_uploads_credentials(monkeypatch: pytest
     assert cli.cmd_provision_github_app(None) == 0
 
     assert read_env_file(app_file) == {
-        "GITHUB_APP_CLIENT_ID": "client-id",
-        "GITHUB_APP_PRIVATE_KEY": "-----BEGIN KEY-----\\nprivate\\n-----END KEY-----",
+        "PUBLIC_DIARY_APP_CLIENT_ID": "client-id",
+        "PUBLIC_DIARY_APP_PRIVATE_KEY": "-----BEGIN KEY-----\\nprivate\\n-----END KEY-----",
     }
     assert ("install", "public-diary-automation", "owner/repo") in calls
-    assert ("secret", "GITHUB_APP_CLIENT_ID", "client-id") in calls
-    assert ("secret", "GITHUB_APP_PRIVATE_KEY", "-----BEGIN KEY-----\\nprivate\\n-----END KEY-----") in calls
+    assert ("secret", "PUBLIC_DIARY_APP_CLIENT_ID", "client-id") in calls
+    assert ("secret", "PUBLIC_DIARY_APP_PRIVATE_KEY", "-----BEGIN KEY-----\\nprivate\\n-----END KEY-----") in calls
 
 
 def test_prompt_github_app_installation_waits_for_confirmation(
@@ -929,8 +963,8 @@ def test_provision_all_batches_independent_work(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.setenv("DISCORD_WEBHOOK_FILE", str(webhook_file))
     monkeypatch.setenv("GOOGLE_DRIVE_TOKEN_FILE", str(token_file))
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.example")
-    monkeypatch.setenv("GITHUB_APP_CLIENT_ID", "client-id")
-    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "private-key")
+    monkeypatch.setenv("PUBLIC_DIARY_APP_CLIENT_ID", "client-id")
+    monkeypatch.setenv("PUBLIC_DIARY_APP_PRIVATE_KEY", "private-key")
     monkeypatch.setattr(cli, "GoogleApis", FakeGoogle)
     monkeypatch.setattr(cli, "select_project", lambda _google: "proj")
     monkeypatch.setattr(cli, "build_act_vars", lambda _google: FakeVars())
@@ -945,11 +979,11 @@ def test_provision_all_batches_independent_work(monkeypatch: pytest.MonkeyPatch,
 
     assert read_env_file(var_file)["GCP_SERVICE_ACCOUNT"] == "svc@proj.iam.gserviceaccount.com"
     assert read_env_file(secret_file)["DISCORD_WEBHOOK_URL"] == "https://discord.example"
-    assert read_env_file(secret_file)["GITHUB_APP_CLIENT_ID"] == "client-id"
-    assert read_env_file(secret_file)["GITHUB_APP_PRIVATE_KEY"] == "private-key"
+    assert read_env_file(secret_file)["PUBLIC_DIARY_APP_CLIENT_ID"] == "client-id"
+    assert read_env_file(secret_file)["PUBLIC_DIARY_APP_PRIVATE_KEY"] == "private-key"
     assert ("secret", "DISCORD_WEBHOOK_URL", "https://discord.example") in calls
-    assert ("secret", "GITHUB_APP_CLIENT_ID", "client-id") in calls
-    assert ("secret", "GITHUB_APP_PRIVATE_KEY", "private-key") in calls
+    assert ("secret", "PUBLIC_DIARY_APP_CLIENT_ID", "client-id") in calls
+    assert ("secret", "PUBLIC_DIARY_APP_PRIVATE_KEY", "private-key") in calls
     assert ("drive", "drive-id", "svc@proj.iam.gserviceaccount.com", "reader") not in calls
     github_principal = (
         "principalSet://iam.googleapis.com/"

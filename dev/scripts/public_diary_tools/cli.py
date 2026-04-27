@@ -61,8 +61,10 @@ ROOT_MAKEFILE = Path("Makefile")
 LOG_LEVEL_ENV_NAMES = ("PUBLIC_DIARY_LOG_LEVEL", "LOG_LEVEL")
 LOGGER = logging.getLogger(__name__)
 GITHUB_API_VERSION = "2022-11-28"
-GITHUB_APP_CLIENT_ID_SECRET = "GITHUB_APP_CLIENT_ID"
-GITHUB_APP_PRIVATE_KEY_SECRET = "GITHUB_APP_PRIVATE_KEY"
+GITHUB_APP_CLIENT_ID_SECRET = "PUBLIC_DIARY_APP_CLIENT_ID"
+GITHUB_APP_PRIVATE_KEY_SECRET = "PUBLIC_DIARY_APP_PRIVATE_KEY"
+LEGACY_GITHUB_APP_CLIENT_ID_SECRET = "GITHUB_APP_CLIENT_ID"
+LEGACY_GITHUB_APP_PRIVATE_KEY_SECRET = "GITHUB_APP_PRIVATE_KEY"
 GITHUB_APP_NAME_MAX_LENGTH = 34
 
 
@@ -325,8 +327,27 @@ def _github_app_values(required: bool = False) -> dict[str, str]:
         GITHUB_APP_CLIENT_ID_SECRET: "",
         GITHUB_APP_PRIVATE_KEY_SECRET: "",
     }
+    legacy_keys = {
+        LEGACY_GITHUB_APP_CLIENT_ID_SECRET: GITHUB_APP_CLIENT_ID_SECRET,
+        LEGACY_GITHUB_APP_PRIVATE_KEY_SECRET: GITHUB_APP_PRIVATE_KEY_SECRET,
+    }
     if github_app_file().exists():
-        values.update({key: value for key, value in read_env_file(github_app_file()).items() if key in values})
+        file_values = read_env_file(github_app_file())
+        values.update({key: value for key, value in file_values.items() if key in values})
+        values.update(
+            {
+                target: file_values[source]
+                for source, target in legacy_keys.items()
+                if file_values.get(source) and not values[target]
+            },
+        )
+    values.update(
+        {
+            target: os.environ[source]
+            for source, target in legacy_keys.items()
+            if os.environ.get(source) and not values[target]
+        },
+    )
     values.update(
         {
             key: value
