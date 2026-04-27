@@ -16,7 +16,8 @@ def test_web_request_progress_tracks_dynamic_totals() -> None:
         add_web_requests(10)
 
     assert "Web requests completed/initiated/total: 5/5/20 (25%)" in output.getvalue()
-    assert output.getvalue().endswith("\n")
+    assert output.getvalue().startswith("\n\n")
+    assert output.getvalue().endswith("\n\n")
 
 
 def test_track_web_request_without_active_progress_is_noop() -> None:

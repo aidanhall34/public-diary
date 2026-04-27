@@ -41,7 +41,7 @@ class WebRequestProgress:
 
     def finish(self) -> None:
         if self._rendered:
-            self.output.write("\n")
+            self.output.write("\n\n")
             self.output.flush()
 
     def _render(self) -> None:
@@ -50,6 +50,8 @@ class WebRequestProgress:
             summary = f"{self.completed}/{self.initiated}/{self.total} ({percent}%)"
         else:
             summary = f"{self.completed}/{self.initiated}/?"
+        if not self._rendered:
+            self.output.write("\n\n")
         self.output.write(f"\rWeb requests completed/initiated/total: {summary}")
         self.output.flush()
         self._rendered = True
