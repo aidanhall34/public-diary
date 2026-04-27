@@ -20,6 +20,7 @@ class WebRequestProgress:
     initiated: int = 0
     total: int = 0
     _rendered: bool = False
+    _line_open: bool = False
 
     def add_total(self, count: int) -> None:
         if count <= 0:
@@ -40,9 +41,13 @@ class WebRequestProgress:
             self._render()
 
     def finish(self) -> None:
-        if self._rendered:
-            self.output.write("\n\n")
+        if self._line_open:
+            self.output.write("\n")
             self.output.flush()
+            self._line_open = False
+
+    def start_output_line(self) -> None:
+        self.finish()
 
     def _render(self) -> None:
         if self.total:
@@ -55,6 +60,27 @@ class WebRequestProgress:
         self.output.write(f"\rWeb requests completed/initiated/total: {summary}")
         self.output.flush()
         self._rendered = True
+        self._line_open = True
+
+
+class ProgressAwareOutput:
+    def __init__(self, output: TextIO, progress: WebRequestProgress) -> None:
+        self._output = output
+        self._progress = progress
+
+    def write(self, value: str) -> int:
+        if value:
+            self._progress.start_output_line()
+        return self._output.write(value)
+
+    def flush(self) -> None:
+        self._output.flush()
+
+    def isatty(self) -> bool:
+        return self._output.isatty()
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._output, name)
 
 
 def current_progress() -> WebRequestProgress | None:
@@ -78,11 +104,16 @@ def track_web_request(*, planned: bool = True) -> Iterator[None]:
 
 
 @contextlib.contextmanager
-def web_request_progress(output: TextIO = sys.stderr) -> Iterator[WebRequestProgress]:
+def web_request_progress(output: TextIO | None = None) -> Iterator[WebRequestProgress]:
+    output = output or sys.stderr
     progress = WebRequestProgress(output=output)
     token = _CURRENT_PROGRESS.set(progress)
     try:
-        yield progress
+        with (
+            contextlib.redirect_stdout(ProgressAwareOutput(sys.stdout, progress)),
+            contextlib.redirect_stderr(ProgressAwareOutput(sys.stderr, progress)),
+        ):
+            yield progress
     finally:
         progress.finish()
         _CURRENT_PROGRESS.reset(token)
