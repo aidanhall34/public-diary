@@ -344,6 +344,9 @@ def repository_from_gh() -> str:
 
 
 def github_token_from_gh() -> str:
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        return token
     return subprocess.check_output(("gh", "auth", "token"), text=True).strip()
 
 
