@@ -58,6 +58,12 @@ jobs:
           cache: npm
           cache-dependency-path: quartz/package-lock.json
 
+      - name: Install act system dependencies
+        if: ${{ env.ACT == 'true' }}
+        run: |
+          apt-get update
+          apt-get install -y rsync
+
       - name: Authenticate to Google Cloud
         if: ${{ env.ACT != 'true' }}
         id: auth
@@ -142,7 +148,9 @@ jobs:
           fi
 
       - name: Upload GitHub Pages artifact
-        if: steps.vault-changes.outputs.should_publish == 'true'
+        if: >-
+          steps.vault-changes.outputs.should_publish == 'true' && env.ACT !=
+          'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: quartz/public

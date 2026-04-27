@@ -8,6 +8,7 @@ from typing import Any, Self, cast
 
 import pytest
 from public_diary_tools import cli
+from public_diary_tools.clients import DRIVE_READONLY_SCOPE
 from public_diary_tools.envfiles import read_env_file, write_env_file
 
 
@@ -272,7 +273,12 @@ def test_write_act_drive_token_grants_active_user(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("GOOGLE_DRIVE_TOKEN_FILE", str(token_file))
     monkeypatch.setattr(cli, "GoogleApis", FakeGoogle)
     monkeypatch.setattr(cli, "active_gcloud_account", lambda: "user@example.com")
-    monkeypatch.setattr(cli, "gcloud_impersonated_token", lambda _service_account: "drive-token")
+
+    def fake_impersonated_token(_service_account: str, scopes: list[str]) -> str:
+        calls.append(("token", tuple(scopes)))
+        return "drive-token"
+
+    monkeypatch.setattr(cli, "gcloud_impersonated_token", fake_impersonated_token)
 
     assert cli.cmd_write_act_drive_token(None) == 0
     assert token_file.read_text() == "drive-token\n"
@@ -285,6 +291,7 @@ def test_write_act_drive_token_grants_active_user(monkeypatch: pytest.MonkeyPatc
             "roles/iam.serviceAccountTokenCreator",
             "user:user@example.com",
         ),
+        ("token", (DRIVE_READONLY_SCOPE,)),
     ]
 
 

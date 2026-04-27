@@ -29,12 +29,11 @@ def gcloud_token(scopes: list[str]) -> str:
     return gcloud_value("auth", "print-access-token", f"--scopes={','.join(scopes)}")
 
 
-def gcloud_impersonated_token(service_account: str) -> str:
-    return gcloud_value(
-        "auth",
-        "print-access-token",
-        f"--impersonate-service-account={service_account}",
-    )
+def gcloud_impersonated_token(service_account: str, scopes: list[str] | None = None) -> str:
+    args = ["auth", "print-access-token", f"--impersonate-service-account={service_account}"]
+    if scopes:
+        args.append(f"--scopes={','.join(scopes)}")
+    return gcloud_value(*args)
 
 
 def active_gcloud_account() -> str:

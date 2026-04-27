@@ -15,6 +15,7 @@ from typing import Any, cast
 import requests
 
 from public_diary_tools.clients import (
+    DRIVE_READONLY_SCOPE,
     GithubClient,
     GoogleApis,
     active_gcloud_account,
@@ -225,7 +226,7 @@ def cmd_write_act_drive_token(_: argparse.Namespace | None) -> int:
         f"user:{user}",
     )
     LOGGER.debug("minting local act token with service account impersonation")
-    token = gcloud_impersonated_token(service_account)
+    token = gcloud_impersonated_token(service_account, [DRIVE_READONLY_SCOPE])
     google_drive_token_file().parent.mkdir(parents=True, exist_ok=True)
     google_drive_token_file().write_text(f"{token}\n")
     google_drive_token_file().chmod(0o600)
