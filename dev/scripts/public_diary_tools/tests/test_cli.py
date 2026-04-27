@@ -618,6 +618,27 @@ def test_github_request_and_manifest_helpers(monkeypatch: pytest.MonkeyPatch) ->
     assert calls[0][1] == "https://api.github.com/path"
 
 
+def test_github_app_name_defaults_to_short_repository_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_APP_NAME", raising=False)
+
+    manifest = cli._github_app_manifest("aidanhall34/public-diary", "http://callback")  # noqa: SLF001
+    long_manifest = cli._github_app_manifest("owner/repository-name-that-is-too-long", "http://callback")  # noqa: SLF001
+
+    assert manifest["name"] == "public-diary automation"
+    assert long_manifest["name"] == "repository-name-that-is automation"
+    assert len(long_manifest["name"]) == 34
+
+
+def test_github_app_name_rejects_invalid_configured_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_APP_NAME", "x" * 35)
+    with pytest.raises(RuntimeError, match="cannot be longer than 34"):
+        cli._github_app_manifest("owner/repo", "http://callback")  # noqa: SLF001
+
+    monkeypatch.setenv("GITHUB_APP_NAME", " ")
+    with pytest.raises(RuntimeError, match="cannot be empty"):
+        cli._github_app_manifest("owner/repo", "http://callback")  # noqa: SLF001
+
+
 def test_github_request_handles_empty_response(monkeypatch: pytest.MonkeyPatch) -> None:
     class EmptyResponse:
         def raise_for_status(self) -> None:

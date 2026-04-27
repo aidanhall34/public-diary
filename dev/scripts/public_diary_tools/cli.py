@@ -63,6 +63,7 @@ LOGGER = logging.getLogger(__name__)
 GITHUB_API_VERSION = "2022-11-28"
 GITHUB_APP_CLIENT_ID_SECRET = "GITHUB_APP_CLIENT_ID"
 GITHUB_APP_PRIVATE_KEY_SECRET = "GITHUB_APP_PRIVATE_KEY"
+GITHUB_APP_NAME_MAX_LENGTH = 34
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -499,8 +500,23 @@ def _github_request(method: str, path: str, token: str | None = None, payload: d
         return {}
 
 
+def _github_app_name(repo: str) -> str:
+    configured_name = os.environ.get("GITHUB_APP_NAME")
+    if configured_name is not None:
+        app_name = configured_name.strip()
+        if not app_name:
+            raise RuntimeError("GITHUB_APP_NAME cannot be empty.")
+    else:
+        repo_name = repo.rsplit("/", 1)[-1]
+        suffix = " automation"
+        app_name = f"{repo_name[: GITHUB_APP_NAME_MAX_LENGTH - len(suffix)]}{suffix}"
+    if len(app_name) > GITHUB_APP_NAME_MAX_LENGTH:
+        raise RuntimeError(f"GitHub App name cannot be longer than {GITHUB_APP_NAME_MAX_LENGTH} characters.")
+    return app_name
+
+
 def _github_app_manifest(repo: str, callback_url: str) -> dict[str, Any]:
-    app_name = os.environ.get("GITHUB_APP_NAME", f"{repo.replace('/', '-')} automation")
+    app_name = _github_app_name(repo)
     return {
         "name": app_name,
         "url": f"https://github.com/{repo}",
