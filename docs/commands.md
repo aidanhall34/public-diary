@@ -319,7 +319,21 @@ GitHub repository variables written by the tooling:
 GitHub workflow authentication uses a GitHub App installation token minted by `actions/create-github-app-token`.
 Create and install the app with `make python-tool ARGS="provision-github-app"`. The tool uploads
 `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_PRIVATE_KEY` to repository secrets and writes a local ignored
-`dev/act/github-app.env` source file for `act`. Discord failure notifications use the optional
+`dev/act/github-app.env` source file for `act`.
+
+Set these GitHub App repository permissions:
+
+- Actions: read-only. Lets workflow-created app tokens read Actions metadata.
+- Contents: read and write. Required for repository checkout, release metadata, committing synced vault notes, and
+  pushing wiki/docs changes.
+- Metadata: read-only. Required by GitHub for all GitHub Apps.
+- Pages: read and write. Required by `actions/configure-pages` and `actions/deploy-pages`.
+- Pull requests: read and write. Required when the deploy workflow opens or finds the automated vault sync PR.
+
+No organization permissions, account permissions, webhook events, or webhook URL are required for this repository. The
+tool-generated manifest sets webhooks inactive.
+
+Discord failure notifications use the optional
 `DISCORD_WEBHOOK_URL` repository secret. Write the local Discord file with
 `make python-tool ARGS="write-discord-webhook"`, then upload secrets with
 `make python-tool ARGS="upload-github-secrets"`. GitHub secrets are write-only through `gh`, so the tooling uploads

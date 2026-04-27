@@ -185,13 +185,17 @@ an app private key, prompts you to install the app, adds this repository to the 
 selected repositories, uploads `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_PRIVATE_KEY` to repository secrets, and writes
 `dev/act/github-app.env` for local `act` runs.
 
-The GitHub App needs these repository permissions:
+Set these GitHub App repository permissions:
 
-- Actions: read
-- Contents: write
-- Metadata: read
-- Pages: write
-- Pull requests: write
+- Actions: read-only. Lets workflow-created app tokens read Actions metadata.
+- Contents: read and write. Required for repository checkout, release metadata, committing synced vault notes, and
+  pushing wiki/docs changes.
+- Metadata: read-only. Required by GitHub for all GitHub Apps.
+- Pages: read and write. Required by `actions/configure-pages` and `actions/deploy-pages`.
+- Pull requests: read and write. Required when the deploy workflow opens or finds the automated vault sync PR.
+
+No organization permissions, account permissions, webhook events, or webhook URL are required for this repository. The
+tool-generated manifest sets webhooks inactive.
 
 ## GitHub Secrets
 
