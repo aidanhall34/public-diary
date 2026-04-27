@@ -18,9 +18,9 @@ This avoids storing a long-lived Google refresh token or service account key in 
 1. The workflow starts in GitHub Actions.
 2. GitHub presents its OIDC identity token to Google.
 3. Google Workload Identity Federation exchanges that identity for a short-lived Google credential.
-4. `google-github-actions/auth` writes runtime credentials for the job.
-5. `rclone` uses those runtime credentials through `env_auth = true`.
-6. The job finishes and the auth action cleans up generated credential files.
+4. `google-github-actions/auth` mints a short-lived OAuth access token scoped only to Google Drive read access.
+5. `rclone` uses that bearer token directly.
+6. The job finishes and the token expires.
 
 ## Why this is the preferred path
 
@@ -28,7 +28,7 @@ This avoids storing a long-lived Google refresh token or service account key in 
 - no service account key JSON is stored in GitHub
 - access exists only for the running workflow job
 - access can be revoked centrally by removing the Workload Identity binding or the Shared Drive membership
-- scope can be limited to read-only Drive access
+- the runtime token is limited to `https://www.googleapis.com/auth/drive.readonly`
 
 ## Repository variables
 
@@ -47,6 +47,7 @@ Set these GitHub repository variables:
 - a Google Cloud service account used by the workflow
 - a Workload Identity Pool and Provider that trust `https://token.actions.githubusercontent.com`
 - an IAM binding that allows the GitHub repo to impersonate the service account
+- an IAM binding that allows the service account to mint scoped access tokens for itself
 
 ## Preferred storage model
 
@@ -83,11 +84,12 @@ The workflow uses `google-github-actions/auth@v3` with:
 
 - `workload_identity_provider`
 - `service_account`
-- `create_credentials_file: true`
-- `export_environment_variables: true`
-- `cleanup_credentials: true`
+- `token_format: access_token`
+- `access_token_scopes: https://www.googleapis.com/auth/drive.readonly`
+- `access_token_lifetime: 3600s`
+- `create_credentials_file: false`
 
-It then writes a minimal `rclone` config using `env_auth = true` and runs:
+It then writes a minimal `rclone` config with that access token and runs:
 
 ```sh
 rclone copy "vault:${GOOGLE_DRIVE_PATH}" vault/ --drive-skip-gdocs --create-empty-src-dirs --log-level INFO --exclude ".obsidian/**"
@@ -103,4 +105,5 @@ The repository should not use `rclone bisync`, `rclone copy`, or `rclone sync` w
 
 - Prefer Shared Drive membership over domain-wide delegation if you control the Drive layout.
 - Do not store a Google service account key JSON in GitHub unless you have no alternative.
-- If a future build exceeds the lifetime of the federated credential, mint a scoped access token explicitly for the required job duration.
+- If a future build exceeds the one-hour token lifetime, split the workflow or redesign the sync so it completes within the token lifetime.
+- Discord notifications use only the `DISCORD_WEBHOOK_URL` GitHub secret and run after workflow job failure or cancellation.

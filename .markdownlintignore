@@ -1,0 +1,9 @@
+.git/
+.pytest_cache/
+.ruff_cache/
+.venv/
+node_modules/
+quartz/
+vault/
+images/
+dev/act/

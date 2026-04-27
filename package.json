@@ -3,6 +3,7 @@
   "private": true,
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
-    "@commitlint/config-conventional": "^19.8.1"
+    "@commitlint/config-conventional": "^19.8.1",
+    "markdownlint-cli": "^0.48.0"
   }
 }

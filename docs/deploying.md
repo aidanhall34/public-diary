@@ -6,19 +6,19 @@ The site is built with Quartz and deployed to GitHub Pages from GitHub Actions.
 
 - push to `main`
 - manual `workflow_dispatch`
-- nightly schedule at `0 0 * * *` which is 00:00 UTC daily
+- nightly schedule at `0 14 * * *` which is 00:00 AEST daily
 
 ## Build flow
 
 1. Check out the repository.
 2. Configure GitHub Pages.
 3. Install Node.js.
-4. Authenticate to Google Cloud with GitHub OIDC and Workload Identity Federation.
+4. Mint a short-lived Google Drive read-only token with GitHub OIDC and Workload Identity Federation.
 5. Install `rclone`.
-6. Build a temporary `rclone` config that uses runtime credentials.
+6. Build a temporary `rclone` config that uses the Drive read-only token.
 7. Run `make build`.
-10. Upload `quartz/public` as the Pages artifact.
-11. Deploy the artifact to GitHub Pages.
+8. Upload `quartz/public` as the Pages artifact.
+9. Deploy the artifact to GitHub Pages.
 
 ## Local preview
 
@@ -34,7 +34,7 @@ This pulls the latest notes, stages the current vault into Quartz, and runs `npx
 
 Do not hand-edit `quartz/quartz.config.ts` or `quartz/quartz.layout.ts`.
 
-This repository treats `config/quartz-site.json` and `config/quartz-layout.json` as the source of truth and uses `scripts/configure-quartz.mjs` to generate `quartz/quartz.config.ts` and `quartz/quartz.layout.ts` from those JSON files during build and serve flows.
+This repository treats `config/quartz-site.json` and `config/quartz-layout.json` as the source of truth and uses `./dev/scripts/configure-quartz.mjs` to generate `quartz/quartz.config.ts` and `quartz/quartz.layout.ts` from those JSON files during build and serve flows.
 
 ## Comments
 
@@ -81,11 +81,23 @@ Set these repository variables:
 
 No long-lived Google credential secret is required for the preferred setup.
 
-## Runtime cleanup
+## Runtime credentials
 
-The workflow uses `google-github-actions/auth` with `cleanup_credentials: true`.
+The workflow uses `google-github-actions/auth` to mint an access token scoped to `https://www.googleapis.com/auth/drive.readonly`.
 
-That means generated credential files are removed automatically when the job ends.
+No Google application-default credentials file is generated in the job.
+
+## Failure notifications
+
+Both GitHub Actions workflows send a Discord webhook notification when a workflow job fails or is cancelled.
+
+The notification includes:
+
+- run duration
+- repository link
+- workflow run link
+- commit link
+- ref, actor, and job result summary
 
 ## Read-only sync rule
 
@@ -125,10 +137,10 @@ The nightly trigger is currently:
 
 ```yaml
 schedule:
-  - cron: "0 0 * * *"
+  - cron: "0 14 * * *"
 ```
 
-GitHub Actions interprets cron schedules in UTC, so this runs daily at 00:00 UTC, not local midnight in Australia/Sydney.
+GitHub Actions interprets cron schedules in UTC, so this runs daily at 00:00 AEST.
 
 ## Wiki publishing
 

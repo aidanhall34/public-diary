@@ -1,7 +1,7 @@
 filters:
   and:
     - '!file.name.endsWith(".base")'
-    - file.path.startsWith("daily-notes")
+    - file.path.contains("daily-notes/")
     - '!file.folder.contains("images")'
 properties:
   file.name:

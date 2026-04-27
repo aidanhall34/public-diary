@@ -24,7 +24,7 @@ quartz-bootstrap:
 	fi
 
 quartz-configure: quartz-bootstrap
-	node scripts/configure-quartz.mjs
+	node ./dev/scripts/configure-quartz.mjs
 
 quartz-deps: quartz-bootstrap repo-root-deps
 	@if [ -f "$(PACKAGE_LOCK)" ]; then \

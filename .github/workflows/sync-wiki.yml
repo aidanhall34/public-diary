@@ -1,3 +1,4 @@
+---
 name: Sync docs to GitHub Wiki
 
 on:
@@ -11,6 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -33,3 +35,23 @@ jobs:
           path: docs
           preprocess: true
           disable-empty-commits: true
+
+  notify-failure:
+    needs:
+      - publish-wiki
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Notify Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DISCORD_JOB_RESULTS: "publish-wiki=${{ needs.publish-wiki.result }}"
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          UV_CACHE_DIR=/tmp/uv-cache uv sync --all-groups
+          PYTHONPATH=dev/scripts uv run python -m public_diary_tools.cli notify-discord

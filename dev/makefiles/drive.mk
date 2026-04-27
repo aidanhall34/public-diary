@@ -1,6 +1,6 @@
 LOCK_FILE := $(HOME)/.cache/public-diary-notes-clone.lock
-GOOGLE_DRIVE_REMOTE := obsidian-gdrive
-GOOGLE_DRIVE_PATH := obs-notes/obs-notes/
+GOOGLE_DRIVE_REMOTE ?= obsidian-gdrive
+GOOGLE_DRIVE_PATH ?= obs-notes/obs-notes/
 
 .PHONY: notes-clone
 

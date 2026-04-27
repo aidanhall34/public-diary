@@ -1,7 +1,7 @@
 ---
 creation date: <% tp.file.creation_date() %>
 modification date: <% tp.file.last_modified_date("dddd Do MMMM YYYY HH:mm:ss") %>
-weather: '  <% JSON.parse(await tp.file.include("[[weather]]")).condition %>'
+weather: <% JSON.parse(await tp.file.include("[[weather]]")).condition %>
 ---
 # Notes for {{date:DD-MM-YYYY}}
 ## todo

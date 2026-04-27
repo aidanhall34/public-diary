@@ -1,3 +1,4 @@
+---
 name: Deploy Quartz site to GitHub Pages
 
 on:
@@ -5,10 +6,11 @@ on:
     branches:
       - main
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 14 * * *"
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -37,13 +39,17 @@ jobs:
           cache-dependency-path: quartz/package-lock.json
 
       - name: Authenticate to Google Cloud
+        if: ${{ env.ACT != 'true' }}
+        id: auth
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
-          create_credentials_file: true
-          export_environment_variables: true
-          cleanup_credentials: true
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/drive.readonly
+          access_token_lifetime: 3600s
+          access_token_subject: ${{ vars.GOOGLE_WORKSPACE_USER }}
+          create_credentials_file: false
 
       - name: Install rclone
         run: |
@@ -53,21 +59,21 @@ jobs:
         env:
           GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ vars.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
           GOOGLE_DRIVE_SHARED_DRIVE_ID: ${{ vars.GOOGLE_DRIVE_SHARED_DRIVE_ID }}
-          GOOGLE_WORKSPACE_USER: ${{ vars.GOOGLE_WORKSPACE_USER }}
+          GOOGLE_DRIVE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token || secrets.GOOGLE_DRIVE_ACCESS_TOKEN }}
         run: |
           mkdir -p ~/.config/rclone
           cat > ~/.config/rclone/rclone.conf <<EOF
           [vault]
           type = drive
           scope = drive.readonly
-          env_auth = true
+          token = {"access_token":"${GOOGLE_DRIVE_ACCESS_TOKEN}","token_type":"Bearer","expiry":"2099-01-01T00:00:00Z"}
           root_folder_id = ${GOOGLE_DRIVE_ROOT_FOLDER_ID}
           team_drive = ${GOOGLE_DRIVE_SHARED_DRIVE_ID}
-          impersonate = ${GOOGLE_WORKSPACE_USER}
           EOF
 
       - name: Build site
         env:
+          GOOGLE_DRIVE_REMOTE: vault
           GOOGLE_DRIVE_PATH: ${{ vars.GOOGLE_DRIVE_PATH }}
         run: make build
 
@@ -86,3 +92,24 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  notify-failure:
+    needs:
+      - build
+      - deploy
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Notify Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DISCORD_JOB_RESULTS: "build=${{ needs.build.result }}, deploy=${{ needs.deploy.result }}"
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          UV_CACHE_DIR=/tmp/uv-cache uv sync --all-groups
+          PYTHONPATH=dev/scripts uv run python -m public_diary_tools.cli notify-discord
