@@ -6,7 +6,7 @@ GOOGLE_DRIVE_PATH ?= obs-notes/obs-notes/
 
 notes-clone: repo-setup
 	mkdir -p "$(VAULT_DIR)" "$(dir $(LOCK_FILE))"
-	flock -n "$(LOCK_FILE)" rclone copy \
+	flock -n "$(LOCK_FILE)" rclone sync \
 			"$(GOOGLE_DRIVE_REMOTE):$(GOOGLE_DRIVE_PATH)" \
 			"$(VAULT_DIR)/" \
 			--drive-skip-gdocs \

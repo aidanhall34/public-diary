@@ -120,11 +120,17 @@ make build
 The underlying clone step runs:
 
 ```sh
-rclone copy "vault:${GOOGLE_DRIVE_PATH}" vault/ --drive-skip-gdocs --create-empty-src-dirs --log-level INFO --exclude ".obsidian/**"
+rclone sync "vault:${GOOGLE_DRIVE_PATH}" vault/ \
+  --drive-skip-gdocs \
+  --create-empty-src-dirs \
+  --log-level INFO \
+  --exclude ".obsidian/**" \
+  --exclude ".trash/**"
 ```
 
 Because the Google Drive remote is the source and the local workspace is the destination, the command reads from Drive
-and writes only to local disk.
+and writes only to local disk. `sync` also removes local files that no longer exist in Drive, which prevents renamed or
+moved notes from being published twice under stale paths.
 
 Unlike your personal sync script, this repository does not use `rclone bisync`.
 
