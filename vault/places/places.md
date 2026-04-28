@@ -6,6 +6,7 @@
 - **Restaurants**
 	- [[Cafe Botanica]]
 	- [[Feel Good Burgers]]
+	- [[Made in Little Italy]]
 	- [[The Woodstock hotel]]
 - [[places]]
 

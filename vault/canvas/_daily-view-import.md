@@ -1,208 +1,83 @@
 ---
-creation date: 2026-04-26 08:16
-modification date: Sunday 26th April 2026 08:16:16
+creation date: 2026-04-28 02:00
+modification date: Tuesday 28th April 2026 02:00:58
 weather: sunny
 ---
-  
 
 ## Weather — Meadowbank
 
 sunny ☀️
 
 - Max: 24.2°C
-- Min: 11.6°C
+- Min: 11.4°C
 - 3pm: 23.8°C
 
 ---
 
-# Notes for 26-04-2026
+# Notes for 28-04-2026
 ## todo
-- [ ] Do the washing
-- [ ] clean the kitchen
-- [ ] finish gateway server build and deploy for homelab
-- [ ] Begin working on telemetry solution (must be cheap and portable)
+- [ ] prepare chronos PR for merge
 
 ## today I will
+Go to work and work on some implementation. I'll try to keep social distractions minimal if possible.
 
-Do the cleaning I didn't do yesterday....
-Finish the gateway in the [[homelab]] , and begin working on the telemetry backends.
-
-#homelab #telemetry #otlp
 ## today I did
-### Understanding the obsidian graph and musings on LLMs
-
-I have added [the waypoint plugin](https://github.com/IdreesInc/Waypoint) into the mix so I can see links between files and folder in the the graph. I wonder at what point it becomes more efficient to give the LLM agents tools for traversing the obsidian idea graph than it is to just let them read the files directly.
-Providing it the graph makes immediate links between ideas (tags) and documents, instead of having to read all files, parse them, keep an internal record of what it is and what its about, the comparing it to other files. I guess it depends on the query you want to run. i.e.
-```
-Show me all pages related to storage
-OR
-Tell me about who I have been to the pub with on tuesdays 
-```
-The LLM can look at all tags, find the relevant ones, create a short list of pages using the graph, then only crawl that content.
-I can't really think of any examples where this isn't a more efficient approach unless the operation has to traverse all files anyway. i.e.
-```
-Tell me how I can more efficently format this note vault
-```
-
-#llms #obsidian #AI 
-### An interesting read about maintaining a collection of writing
-
-And interesting blog post I read to procrastinating doing the dishes:
-https://jzhao.xyz/posts/networked-thought
-Stresses the importance of:
-1) writing for yourself
-   Don't write hype-slop, write with the intention to share knowledge. It doesn't have to be correct, but it must be honest. Share ideas liberally, await criticism, and use it to shape future ideas. You get more points for trying than doing nothing.
-2) friction-less writing
-   Make writing as simple as possible. You want to be able to get SOMETHING onto the page, and you should be able to dynamically link ideas together. Essentially the problem I am trying to solve at the moment for my own notes.  
-
-To take this idea of publishing, I think I want to publish these notes as a static side nightly.
-If I keep up with the daily notes idea, I'll build up a decent library of thoughts and ideas.
-#obsidian #blog #writing 
-
-### Lunch
-Walked down to [[Feel Good Burgers]] for lunch.
-![[Feel-good-borgorts.jpg]]
-
-![[Feel-good-borgort.jpg]]
-
-It was.... Ok. Just fine, adequate. I think I enjoyed the walk more than the burger. I probably shot myself in the foot. I'm hung over, and the sauce threw me off. Google reviews call the fries "Macca's like", which is fairly accurate. Less salty but I think that's better.
-I'd come back, but get a cheese burger instead.
-#walk #burgers #chips 
-### Coffee
-
-Went to [[Cafe Botanica]], got an ice latte.
-Cute little vibe, groups working and studying together, friends playing cards in the corner. In an open square in Rhodes inbetween towers I didn't know about.
-![[Cafe-botanica-logo.jpg]]
-
-![[Cafe-botanica-rhodes-tree.jpg]]
-![[Cafe Botanica coffee.jpg]]
-![[Ryde bridge.jpg]]
-
-Service was slow yet the kitchen was frantic, it was busy Sunday lunch service for such a small cafe. They initially made my order incorrectly (oat instead of regular milk), but fixed it immediately with no issues. ~$8.50 is pretty exy for a latte, but not unheard of. Given the price of coffee these days I feel like it was alright good enough value for money.
-I'd come back again, a good pit stop for a large coffee on the way to [[The learning space]].
-#coffee 
-
-### Is the bribery working?
-I've created a set of goals for Zoe to reach for her tutoring homework.
-She's been doing tutoring for a year and homework completion has always been sporadic.
-I am partly to blame for not providing sufficient time and place for her to do the homework, but she also was not enthused by the idea. She enjoys doing the home work with me next to her to ask questions, which is good bonding time, but its quite time consuming.
-I wanted her to start doing homework alone and be more enthusiastic about it, so I made a work plan.
-![[reward-chart.html]]
-
-It's Sunday, the first day of week 2 of the term. I had to pay out 1000 Robux this morning for last week, and I'm on track to pay out another 1500 by tonight.
-If this continues, perhaps I under-estimated how motivated by roblox a child can be.
-While potential problematic for my wallet, I'm encouraged to see that she is completing the work to a high standard.
-
-#parenting #roblox #robux 
-
-### A conversation with Matt
-
-While walking to get my burger, I had one of my weekly chats with my uncle Matt. We spoke about AI, and what implementation might actually look like for a small business owner. He is in the process of building out a managed SaaS platform for small and medium businesses to effectively manage there data using repositories.
-He will consult with companies about how they can best use AI, and convert there data stores and workflows into AI native formats. Ideally he will host the services he recommends, framing it as a SaaS subscription to generate consistent revenue. This is framed to the customer as automatically being up to date with the latest and greatest things that Matt is getting up to.
-It is an interesting space to explore, and if he can keep costs low through automation, and prove value to customers quickly, it could be a very profitable venture. This is not going to replace all of his existing work for clients, but rather augment it and open additional opportunities to serve new and existing clients.
-
-#AI #llms #business #saas 
-### New lines in codex
-Ctrl+J, why? Because of some ancient Unix convention that says so. More info in [this GitHub comment](https://github.com/openai/codex/discussions/3024#discussioncomment-14821561).
-It works anywhere, so maybe I should start using that over shift + enter.
-#codex #llms  #coding-agents
-## Tags
+### Understanding the implications of using storing obsidian in Google drive
+I created a little graphic using drawio on my phone, which I then uploaded to the obs-notes folder in Google drive directly.\
+I realised that many applications on android have tight integrations to Google drive.\
+I can put just about anything in drive, and it will be able to sync across all my devices and the git repo.\
+This is obvious to many but what I find interesting is that I will be able to incorporate the files with the graph.\
+I can tie photos of friends to places and days, design diagrams to projects, or shareware to posts or anecdotes.\
+Eventually the drive may be a bit heavy for Github Pages, but I'll deal with that when it is actually a problem.\
+#github #github-pages #google-drive #obsidian
 
 
-#daily #notes # Notes for 26-04-2026
-## todo
-- [ ] Do the washing
-- [ ] clean the kitchen
-- [ ] finish gateway server build and deploy for homelab
-- [ ] Begin working on telemetry solution (must be cheap and portable)
+### Danny Lim!
 
-## today I will
+Seeing Danny always makes my day.
 
-Do the cleaning I didn't do yesterday....
-Finish the gateway in the [[homelab]] , and begin working on the telemetry backends.
+![[danny.jpg]]
 
-#homelab #telemetry #otlp
-## today I did
-### Understanding the obsidian graph and musings on LLMs
+#danny-lim
 
-I have added [the waypoint plugin](https://github.com/IdreesInc/Waypoint) into the mix so I can see links between files and folder in the the graph. I wonder at what point it becomes more efficient to give the LLM agents tools for traversing the obsidian idea graph than it is to just let them read the files directly.
-Providing it the graph makes immediate links between ideas (tags) and documents, instead of having to read all files, parse them, keep an internal record of what it is and what its about, the comparing it to other files. I guess it depends on the query you want to run. i.e.
-```
-Show me all pages related to storage
-OR
-Tell me about who I have been to the pub with on tuesdays 
-```
-The LLM can look at all tags, find the relevant ones, create a short list of pages using the graph, then only crawl that content.
-I can't really think of any examples where this isn't a more efficient approach unless the operation has to traverse all files anyway. i.e.
-```
-Tell me how I can more efficently format this note vault
-```
+### The PT testing conference
 
-#llms #obsidian #AI 
-### An interesting read about maintaining a collection of writing
+The PT team put on a conference at the office ([[FDJ United - Kent Street]]) with the "(?) Sydney testers".
+2 talks:
+1) Performance testing for EDA (event driven architectures).\
+   `real world testing for event-driven architeccture`\
+	If I had to distil the talk into  a handful of sentences they would be:\
+	Understanding latency in event driven systems is hard, we need tools to help us stitch multi hop journeys together. Events can fan out (many events become many) or fan in (many events become on entity).\
+	ID's can be propagated across services in messages, and backed collection systems can correlate related events.\
+	You can read more about these concepts in [the OpenTelemetry Context propagation docs](https://opentelemetry.io/docs/concepts/context-propagation/) 
+2) Talk 2 - contract testing\
+   Contract testing for `MICROSERVICES!`.\
+   The speaker proposes that initial work up front, defining versioned interface contracts and distributing mock servers for consumers to use in there integration tests.\
+   One of those "expensive up front, significant reliability improvements if maintained" kinds of deals.\
+   Given we already hand out so many quasi contracts (JSON schema, openAPI schema), I wonder how much of these tests can be generated from those specs.\
+   Perhaps instead of providing a mock server, teams could distributed test cases somehow.\
+   I asked if "time" is something he'd consider in the contract. In his implementation, its focused on request/response contracts, and that he doesn't address latency concerns with his mocks (makes sense).
 
-And interesting blog post I read to procrastinating doing the dishes:
-https://jzhao.xyz/posts/networked-thought
-Stresses the importance of:
-1) writing for yourself
-   Don't write hype-slop, write with the intention to share knowledge. It doesn't have to be correct, but it must be honest. Share ideas liberally, await criticism, and use it to shape future ideas. You get more points for trying than doing nothing.
-2) friction-less writing
-   Make writing as simple as possible. You want to be able to get SOMETHING onto the page, and you should be able to dynamically link ideas together. Essentially the problem I am trying to solve at the moment for my own notes.  
+Wouldn't be a FDJ event with [[Made in Little Italy]] pizzas.
+![[pizza-and-nerds.jpg]]
+![[talk-venue.jpg]]
 
-To take this idea of publishing, I think I want to publish these notes as a static side nightly.
-If I keep up with the daily notes idea, I'll build up a decent library of thoughts and ideas.
-#obsidian #blog #writing 
+#work #testing #openAPI #json-schema #contract-testing #event-driven-architecture
 
-### Lunch
-Walked down to [[Feel Good Burgers]] for lunch.
-![[Feel-good-borgorts.jpg]]
+### Working on the homelab
 
-![[Feel-good-borgort.jpg]]
+I need to finish off the DNS and gateway for the [[homelab]].\
+I will take the approach of "automating the bootstrap" to the homelab deployment.\
+I should be able to go from no repo to deployment with as few key strokes as possible (handle Github sso, linode token generation etc).\
+A feature list to work towards is:\
+wireguard - with 2FA (can we provision the keys through a central auth provider?)\
+DNS over TLS (HTTPS) - This should be internal only - listens on the wireguard interface.\
+DNS blocking - this is the "key feature" of the deployment, we need to measure efficacy, how many "ads" do I see after using the block list? - What does the block list update process look like? What does deployment latency look like?\
+For now, just plug collectors into Public Grafana, this means we need a key provisioning plan for nodes and Github CI. We don't want no auth, but how do we either:\
+a) generate a short lived key - Problem - Crypto in public\
+b) cordon off the haz mat to a private repo - Problem - \$\$ Costs \$\$
 
-It was.... Ok. Just fine, adequate. I think I enjoyed the walk more than the burger. I probably shot myself in the foot. I'm hung over, and the sauce threw me off. Google reviews call the fries "Macca's like", which is fairly accurate. Less salty but I think that's better.
-I'd come back, but get a cheese burger instead.
-#walk #burgers #chips 
-### Coffee
-
-Went to [[Cafe Botanica]], got an ice latte.
-Cute little vibe, groups working and studying together, friends playing cards in the corner. In an open square in Rhodes inbetween towers I didn't know about.
-![[Cafe-botanica-logo.jpg]]
-
-![[Cafe-botanica-rhodes-tree.jpg]]
-![[Cafe Botanica coffee.jpg]]
-![[Ryde bridge.jpg]]
-
-Service was slow yet the kitchen was frantic, it was busy Sunday lunch service for such a small cafe. They initially made my order incorrectly (oat instead of regular milk), but fixed it immediately with no issues. ~$8.50 is pretty exy for a latte, but not unheard of. Given the price of coffee these days I feel like it was alright good enough value for money.
-I'd come back again, a good pit stop for a large coffee on the way to [[The learning space]].
-#coffee 
-
-### Is the bribery working?
-I've created a set of goals for Zoe to reach for her tutoring homework.
-She's been doing tutoring for a year and homework completion has always been sporadic.
-I am partly to blame for not providing sufficient time and place for her to do the homework, but she also was not enthused by the idea. She enjoys doing the home work with me next to her to ask questions, which is good bonding time, but its quite time consuming.
-I wanted her to start doing homework alone and be more enthusiastic about it, so I made a work plan.
-![[reward-chart.html]]
-
-It's Sunday, the first day of week 2 of the term. I had to pay out 1000 Robux this morning for last week, and I'm on track to pay out another 1500 by tonight.
-If this continues, perhaps I under-estimated how motivated by roblox a child can be.
-While potential problematic for my wallet, I'm encouraged to see that she is completing the work to a high standard.
-
-#parenting #roblox #robux 
-
-### A conversation with Matt
-
-While walking to get my burger, I had one of my weekly chats with my uncle Matt. We spoke about AI, and what implementation might actually look like for a small business owner. He is in the process of building out a managed SaaS platform for small and medium businesses to effectively manage there data using repositories.
-He will consult with companies about how they can best use AI, and convert there data stores and workflows into AI native formats. Ideally he will host the services he recommends, framing it as a SaaS subscription to generate consistent revenue. This is framed to the customer as automatically being up to date with the latest and greatest things that Matt is getting up to.
-It is an interesting space to explore, and if he can keep costs low through automation, and prove value to customers quickly, it could be a very profitable venture. This is not going to replace all of his existing work for clients, but rather augment it and open additional opportunities to serve new and existing clients.
-
-#AI #llms #business #saas 
-### New lines in codex
-Ctrl+J, why? Because of some ancient Unix convention that says so. More info in [this GitHub comment](https://github.com/openai/codex/discussions/3024#discussioncomment-14821561).
-It works anywhere, so maybe I should start using that over shift + enter.
-#codex #llms  #coding-agents
-### Opening the dev tools/console in Obsidian
-To save myself a look up, its `ctrl+shift+i`
-
+#dns #blocky #wireguard #vpn
 ## Tags
 
 

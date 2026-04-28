@@ -1,3 +1,6 @@
+---
+title: ah34's Diary
+---
 This site is generated from my daily diary maintained in [obsidian](https://obsidian.md/).\
 This is significantly less refined than the content posted at [blog.ah34.net](https://blog.ah34.net).\
 Its more a log of things that I have found that are interesting from conversations I have with people or on the internet than anything else, and I am using obsidian graphing feature to help me find connections in my life and work.\
