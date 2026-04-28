@@ -1,8 +1,6 @@
 filters:
-  and:
-    - '!file.name.endsWith(".base")'
-    - file.path.contains("daily-notes/")
-    - '!file.folder.contains("images")'
+  or:
+    - /daily-notes\/\d\d\d\d\/.*\/*.md/.matches(file.path)
 properties:
   file.name:
     displayName: Link

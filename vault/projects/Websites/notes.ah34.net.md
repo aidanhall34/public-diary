@@ -1,2 +1,4 @@
 [Link to site](https://notes.ah34.net)\
-[GitHub deployment link](https://github.com/aidanhall34/public-diary)
+[GitHub repository link](https://github.com/aidanhall34/public-diary)\
+Deployment architecture:\
+![[notes-deployment.drawio.svg]]
